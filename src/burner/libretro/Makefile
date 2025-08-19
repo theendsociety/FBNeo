@@ -583,8 +583,8 @@ else
 		CFLAGS += -O3 -DNDEBUG -fomit-frame-pointer
 		CXXFLAGS += -O3 -DNDEBUG -fomit-frame-pointer
 	else
-		CFLAGS += -O2 -DNDEBUG
-		CXXFLAGS += -O2 -DNDEBUG
+		CFLAGS += -O3 -DNDEBUG
+		CXXFLAGS += -O3 -DNDEBUG
 	endif
 endif
 
