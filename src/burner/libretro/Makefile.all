@@ -119,5 +119,18 @@ SOURCES_CXX += $(FBNEO_BURN_DIR)/burn_bitmap.cpp \
 
 FBNEO_SRC_DIRS := $(FBNEO_CPU_DIRS) $(FBNEO_BURN_DIRS)
 
+# mame only
+BURN_BLACKLIST += $(wildcard \
+	$(NES_DIR)/*.cpp $(NES_DIR)/*.c \
+	$(MD_DIR)/*.cpp $(MD_DIR)/*.c \
+	$(SNES_DIR)/*.cpp $(SNES_DIR)/*.c \
+	$(SMS_DIR)/*.cpp $(SMS_DIR)/*.c \
+	$(PCE_DIR)/*.cpp $(PCE_DIR)/*.c \
+	$(MSX_DIR)/*.cpp $(MSX_DIR)/*.c \
+	$(SPECTRUM_DIR)/*.cpp $(SPECTRUM_DIR)/*.c \
+	$(COLECO_DIR)/*.cpp $(COLECO_DIR)/*.c \
+	$(SG1000_DIR)/*.cpp $(SG1000_DIR)/*.c \
+	$(CHANNELF_DIR)/*.cpp $(CHANNELF_DIR)/*.c)
+	
 SOURCES_C   += $(filter-out $(BURN_BLACKLIST),$(foreach dir,$(FBNEO_SRC_DIRS),$(wildcard $(dir)/*.c)))
 SOURCES_CXX += $(filter-out $(BURN_BLACKLIST),$(foreach dir,$(FBNEO_SRC_DIRS),$(wildcard $(dir)/*.cpp)))
