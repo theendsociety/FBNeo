@@ -307,6 +307,10 @@ static INT32 cartridge_load(UINT8* ROMData, UINT32 ROMSize, UINT32 ROMCRC)
 		ROMData[6] |= 8; // "fix to 4-screen mode" - nesdev wiki
 	}
 
+	if (nes20 && ((ROMData[12] & 3) == 1)) {
+		NESMode |= IS_PAL;
+	}
+
 	bprintf(0, _T("PRG Size: %d\n"), Cart.PRGRomSize);
 	bprintf(0, _T("CHR Size: %d\n"), Cart.CHRRomSize);
 
@@ -496,8 +500,10 @@ static INT32 cartridge_load(UINT8* ROMData, UINT32 ROMSize, UINT32 ROMCRC)
 	NESMode |= (ROMCRC == 0xb90a1ca1) ? NO_WORKRAM : 0; // Low G Man
 	NESMode |= (ROMCRC == 0xa905cc12) ? NO_WORKRAM : 0; // Bill & Ted
 	NESMode |= (ROMCRC == 0x45b1869a) ? APU_HACKERY : 0; // rgbleek
-	NESMode |= (ROMCRC == 0xa94b4cbb) ? APU_HACKERY : 0; // famidash
-	NESMode |= (ROMCRC == 0x6a90da54) ? APU_HACKERY : 0; // famidashb
+	NESMode |= (ROMCRC == 0x5bf705b3) ? APU_HACKERY : 0; // famidash
+	NESMode |= (ROMCRC == 0x9baf3585) ? APU_HACKERY : 0; // famidashb
+	NESMode |= (ROMCRC == 0x7556930c) ? APU_HACKERY : 0; // famidashc
+	NESMode |= (ROMCRC == 0x9fc1c56f) ? APU_HACKERY : 0; // famidashd
 	NESMode |= (ROMCRC == 0xc00c4ea5) ? APU_HACKERY : 0; // Sam's Journey
 	NESMode |= (ROMCRC == 0x585f3500) ? ALT_MMC3 : 0; // Darkwing Duck (T-Chi)
 	NESMode |= (ROMCRC == 0x2d826113) ? ALT_MMC3 : 0; // cybercoaster
@@ -1009,6 +1015,7 @@ static UINT32 CHRMap[8];
 static UINT8  CHRType[8]; // enum { MEM_RAM = 0, MEM_RAM_RO = 1, MEM_ROM = 2};
 static UINT8  mapper_regs[0x20]; // General-purpose mapper registers (8bit)
 static UINT16 mapper_regs16[0x20]; // General-purpose mapper registers (16bit)
+static UINT8 mapper446_regs[8]; // General-purpose mapper registers (8bit) (for insane-o-plex mapper)
 static UINT32 mapper_irq_exec; // cycle-delayed irq for mapper_irq();
 static void mapper_irq(INT32 cyc); // forward
 
@@ -1059,6 +1066,7 @@ static void mapper_map_chr(INT32 pagesz, INT32 slot, INT32 bank)
 {
 	for (UINT32 i = 0; i < pagesz; i++) {
 		const int index = pagesz * slot + i;
+//		bprintf(0, _T("map chr; %x  %x  %x.  dest: %x  size: %x\n"), pagesz, slot, bank,CHRType[index],*chr_size_maps[CHRType[index]]);
 		CHRMap[index] = (pagesz * 1024 * bank + 1024 * i) % *chr_size_maps[CHRType[index]];
 #if 0
 		switch (CHRType[pagesz * slot + i]) {
@@ -6680,22 +6688,82 @@ static void mapper64_cycle()
 #undef mapper64_irqcount
 #undef mapper64_irqprescale
 
+// -[ mapper 446 (partial) - only Irem h3001 for now. (hammerin harry 2)
+#define m446_prg_bank (mapper446_regs[1] | (mapper446_regs[2] << 8))
+#define m446_prg_mask (~mapper446_regs[3])
+#define m446_chr_bank (mapper446_regs[6])
+#define m446_chr_prot (mapper446_regs[5] & 0x04)
+#define m446_lock (mapper446_regs[0] & 0x80)
+#define m446_mirror (mapper446_regs[4] & 0x01)
+static void mapper65_map(); // forward (used by mapper446)
+
+static void mapper446_scan()
+{
+	SCAN_VAR(mapper446_regs);
+}
+
+static void mapper446_map()
+{
+	if (m446_lock) {
+		mapper65_map();
+	} else {
+		mapper_map_prg( 8, 0, m446_prg_bank + 0);
+		mapper_map_prg( 8, 1, m446_prg_bank + 1);
+		mapper_map_prg( 8, 2, 0x1e);
+		mapper_map_prg( 8, 3, 0x1f);
+
+		//bprintf( 0, _T("chr bank %x  status %s   mirror %s\n"), m446_chr_bank, (m446_chr_prot) ? _T("MEM_RAM_RO") : _T("MEM_RAM"), (m446_mirror) ? _T("Vertical") : _T("Horizontal"));
+		mapper_map_chr( 8, 0, m446_chr_bank);
+		set_mirroring(m446_mirror ? VERTICAL : HORIZONTAL);
+		mapper_set_chrtype(m446_chr_prot ? MEM_RAM_RO : MEM_RAM);
+	}
+}
+
+static void mapper446_write(UINT16 address, UINT8 data)
+{
+	if (address >= 0x5000 && address <= 0x5007) {
+		mapper446_regs[address & 7] = data;
+
+		mapper_map();
+	}
+}
+
+#undef m446_chr_bank
+#undef m446_chr_prot
+#undef m446_lock
+#undef m446_mirror
+
 // --[ mapper 65 - irem h3001(?): Spartan X2, Kaiketsu Yanchamaru 3: Taiketsu! Zouringen,
 #define mapper65_mirror		(mapper_regs[0x1f - 0])
 #define mapper65_irqenable	(mapper_regs[0x1f - 1])
+#define mapper65_prg_invert	(mapper_regs[0x1f - 2])
 #define mapper65_prg(x)		(mapper_regs[0 + x])
 #define mapper65_chr(x)		(mapper_regs[3 + x])
 #define mapper65_irqcount	(mapper_regs16[0x1f - 0])
 #define mapper65_irqlatch	(mapper_regs16[0x1f - 1])
 
+static void mapper65_reset()
+{
+	mapper65_prg(0) = 0;
+	mapper65_prg(1) = 1;
+
+	mapper65_chr(0) = 0;
+	mapper65_chr(1) = 1;
+	mapper65_chr(2) = 2;
+	mapper65_chr(3) = 3;
+	mapper65_chr(4) = 4;
+	mapper65_chr(5) = 5;
+	mapper65_chr(6) = 6;
+	mapper65_chr(7) = 7;
+}
 
 static void mapper65_write(UINT16 address, UINT8 data)
 {
 	switch (address) {
 		case 0x8000: mapper65_prg(0) = data; break;
 		case 0xa000: mapper65_prg(1) = data; break;
-		case 0xc000: mapper65_prg(2) = data; break;
-		case 0x9001: mapper65_mirror = (~data >> 7) & 1; break;
+		case 0x9000: mapper65_prg_invert = data & 0x80; break;
+		case 0x9001: mapper65_mirror = data >> 6; break;
 		case 0x9003: mapper65_irqenable = data & 0x80; M6502SetIRQLine(0, CPU_IRQSTATUS_NONE); break;
 		case 0x9004: mapper65_irqcount = mapper65_irqlatch; break;
 		case 0x9005: mapper65_irqlatch = (mapper65_irqlatch & 0x00ff) | (data << 8); break;
@@ -6708,16 +6776,21 @@ static void mapper65_write(UINT16 address, UINT8 data)
 		case 0xb005: mapper65_chr(5) = data; break;
 		case 0xb006: mapper65_chr(6) = data; break;
 		case 0xb007: mapper65_chr(7) = data; break;
+		default: bprintf(0, _T("mapper65: unhandled mapper addr  %x  %x\n"), address, data);
 	}
 	mapper_map();
 }
 
 static void mapper65_map()
 {
-	mapper_map_prg( 8, 0, mapper65_prg(0));
-	mapper_map_prg( 8, 1, mapper65_prg(1));
-	mapper_map_prg( 8, 2, mapper65_prg(2));
-	mapper_map_prg( 8, 3, -1);
+	//	bprintf(0, _T("prg bank %x  prg mask  %x\n"),m446_prg_bank, m446_prg_mask);
+	const UINT8 p0 = (mapper65_prg_invert) ? 0x3e : mapper65_prg(0);
+	const UINT8 p2 = (mapper65_prg_invert) ? mapper65_prg(0) : 0x3e;
+
+	mapper_map_prg( 8, 0, (p0              & m446_prg_mask) | m446_prg_bank);
+	mapper_map_prg( 8, 1, (mapper65_prg(1) & m446_prg_mask) | m446_prg_bank);
+	mapper_map_prg( 8, 2, (p2              & m446_prg_mask) | m446_prg_bank);
+	mapper_map_prg( 8, 3, (0x3f            & m446_prg_mask) | m446_prg_bank);
 
 	mapper_map_chr( 1, 0, mapper65_chr(0));
 	mapper_map_chr( 1, 1, mapper65_chr(1));
@@ -6728,7 +6801,12 @@ static void mapper65_map()
 	mapper_map_chr( 1, 6, mapper65_chr(6));
 	mapper_map_chr( 1, 7, mapper65_chr(7));
 
-	set_mirroring(mapper65_mirror ? VERTICAL : HORIZONTAL);
+	switch (mapper65_mirror) {
+		case 0: set_mirroring(VERTICAL); break;
+		case 2: set_mirroring(HORIZONTAL); break;
+		case 1:
+		case 3: set_mirroring(SINGLE_LOW); break;
+	}
 }
 
 static void mapper65_cycle()
@@ -6744,6 +6822,7 @@ static void mapper65_cycle()
 }
 #undef mapper65_mirror
 #undef mapper65_irqenable
+#undef mapper65_prg_invert
 #undef mapper65_prg
 #undef mapper65_chr
 #undef mapper65_irqcount
@@ -8570,6 +8649,7 @@ static INT32 mapper_init(INT32 mappernum)
 	} else {
 		memset(mapper_regs, 0, sizeof(mapper_regs));
 		memset(mapper_regs16, 0, sizeof(mapper_regs16));
+		memset(mapper446_regs, 0, sizeof(mapper446_regs));
 	}
 
 	mapper_write = NULL; // 8000 - ffff
@@ -8610,6 +8690,21 @@ static INT32 mapper_init(INT32 mappernum)
 			mapperFDS_reset();
 			mapper_map();
 			retval = 0;
+			break;
+		}
+
+		case 446: { // Currently supports h3001 for Hammerin' Harry 2
+			mapper_scan_cb  = mapper446_scan;
+			psg_area_write = mapper446_write; // 4000 - 5fff
+
+			// h3001 stuff
+			mapper_write = mapper65_write;
+			mapper_map = mapper446_map;
+			mapper_cycle = mapper65_cycle;
+			mapper65_reset();
+			mapper_map();
+			retval = 0;
+
 			break;
 		}
 
@@ -9198,8 +9293,7 @@ static INT32 mapper_init(INT32 mappernum)
 			mapper_write = mapper65_write;
 			mapper_map = mapper65_map;
 			mapper_cycle = mapper65_cycle;
-			mapper_regs[2] = -2;
-			mapper_map_prg( 8, 3, -1);
+			mapper65_reset();
 			mapper_map();
 			retval = 0;
 			break;
@@ -11219,7 +11313,7 @@ static INT32 gg_decode(char *gg_code, UINT16 &address, UINT8 &value, INT32 &comp
 static const INT32 cheat_MAX = 0x100;
 static INT32 cheats_active = 0;
 
-struct cheat_struct {
+struct nes_cheat_struct {
 	char code[0x10]; // gamegenie code
 	UINT16 address;
 	UINT8 value;
@@ -11228,7 +11322,7 @@ struct cheat_struct {
 	INT32 fbn_cheat_id;
 };
 
-static cheat_struct cheats[cheat_MAX];
+static nes_cheat_struct cheats[cheat_MAX];
 
 static void nes_add_cheat(char *code, int fbn_cheat_id) // 6/8 character game genie codes allowed
 { // lowercase GGenie code: access 0-7fff, uppercase: access 8000-ffff
@@ -11257,12 +11351,12 @@ static void nes_add_cheat(char *code, int fbn_cheat_id) // 6/8 character game ge
 
 static void nes_remove_cheat(char *code)
 {
-	cheat_struct cheat_temp[cheat_MAX];
+	nes_cheat_struct cheat_temp[cheat_MAX];
 	INT32 temp_num = 0;
 
 	for (INT32 i = 0; i < cheats_active; i++) {
 		if (strcmp(code, cheats[i].code) != 0) {
-			memcpy(&cheat_temp[temp_num], &cheats[i], sizeof(cheat_struct));
+			memcpy(&cheat_temp[temp_num], &cheats[i], sizeof(nes_cheat_struct));
 			temp_num++;
 		} else {
 			bprintf(0, _T("cheat %S disabled.\n"), cheats[i].code);

@@ -15,6 +15,11 @@
 #define IDI_TV_NOTWORKING   	            13
 #define IDI_TV_NOTFOUND_ESS     	        14
 #define IDI_TV_NOTFOUND_NON         	    15
+#define IDI_INPD_DETECT_GAMEPADS            16 // icon
+#define IDC_INPD_DETECT_GAMEPADS            17 // control
+#define IDI_TV_ROMDATA_DRV                  18
+#define IDI_LV_CDIMAGE_CUE                  19
+#define IDI_LV_CDIMAGE_CHD                  20
 
 #define IDD_SPLASH							50
 #define IDD_INPD                        	51
@@ -367,7 +372,11 @@
 #define IDC_NCD_SCAN_BUTTON					20811
 #define IDC_NCD_SEL_DIR_BUTTON				20812
 #define IDC_NCD_PLAY_BUTTON					20813
+/*
+*	Use the IDCANCEL control (standard value 2);
+	otherwise, the ESC key cannot be responded to and the modal dialog window cannot be closed.
 #define IDC_NCD_CANCEL_BUTTON				20814
+*/
 #define IDC_NCD_COVER_PREVIEW_PIC			20815
 #define IDC_NCD_LABELSHORT					20816
 #define IDC_NCD_LABELPUBLISHER				20817
@@ -399,6 +408,7 @@
 #define IDC_SUPPORTDIR_TEXT23				20872
 #define IDC_SUPPORTDIR_TEXT24				20873
 #define IDC_SUPPORTDIR_TEXT25				20874
+#define IDC_SUPPORTDIR_TEXT26				20875
 
 #define IDC_SUPPORTDIR_EDIT1				20900
 #define IDC_SUPPORTDIR_EDIT2				20901
@@ -425,6 +435,7 @@
 #define IDC_SUPPORTDIR_EDIT23				20922
 #define IDC_SUPPORTDIR_EDIT24				20923
 #define IDC_SUPPORTDIR_EDIT25				20924
+#define IDC_SUPPORTDIR_EDIT26				20925
 
 #define IDC_SUPPORTDIR_BR1					20950
 #define IDC_SUPPORTDIR_BR2					20951
@@ -451,6 +462,7 @@
 #define IDC_SUPPORTDIR_BR23					20972
 #define IDC_SUPPORTDIR_BR24					20973
 #define IDC_SUPPORTDIR_BR25					20974
+#define IDC_SUPPORTDIR_BR26					20975
 
 #define ID_LICENSE                      	21000
 #define ID_DX9EFFECT                    	21001
@@ -562,6 +574,11 @@
 #define MENU_MEMCARD_INSERT					10022
 #define MENU_MEMCARD_EJECT 					10023
 #define MENU_MEMCARD_TOGGLE					10024
+
+// PGM2 per-slot card menu IDs: base + slot*4 + action (action: 0=Create, 1=Select, 2=Insert, 3=Eject)
+#define MENU_MEMCARD_PGM2_BASE				10040
+#define MENU_MEMCARD_PGM2_ID(slot, action)	(MENU_MEMCARD_PGM2_BASE + (slot) * 4 + (action))
+
 #define MENU_STATE_LOAD_DIALOG          	10030
 #define MENU_STATE_SAVE_DIALOG          	10031
 #define MENU_STATE_LOAD_SLOT            	10032
@@ -869,6 +886,7 @@
 #define MENU_INPUT_P6_SOCDDL				10791
 #define MENU_INPUT_ALL_DEFAULT				10792
 
+#define MENU_INPUT_REDETECT                 10800
 
 #define MENU_BASIC_NORMAL          	    	11001
 #define MENU_BASIC_SCAN                	    11002

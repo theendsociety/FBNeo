@@ -424,6 +424,7 @@ static struct BurnInputInfo FfightaeInputList[] =
 	{"P2 Jump"          , BIT_DIGITAL  , CpsInp000+5, "p2 fire 2"},
 	{"P2 Special"       , BIT_DIGITAL  , CpsInp000+6, "p2 fire 3"},
 
+	{"P3 Coin"          , BIT_DIGITAL  , CpsInp018+2, "p3 coin"   },
 	{"P3 Start"         , BIT_DIGITAL  , CpsInp177+7, "p3 start"  },
 	{"P3 Up"            , BIT_DIGITAL  , CpsInp177+3, "p3 up"     },
 	{"P3 Down"          , BIT_DIGITAL  , CpsInp177+2, "p3 down"   },
@@ -434,8 +435,7 @@ static struct BurnInputInfo FfightaeInputList[] =
 	{"P3 Special"       , BIT_DIGITAL  , CpsInp177+6, "p3 fire 3" },
 
 	{"Reset"            , BIT_DIGITAL  , &CpsReset,   "reset"     },
-	{"Diagnostic"       , BIT_DIGITAL  , CpsInp018+6, "diag"   },
-	{"Service"          , BIT_DIGITAL  , CpsInp018+2, "service"   },
+	{"Diagnostic"       , BIT_DIGITAL  , CpsInp018+6, "diag"      },
 	{"Dip A"            , BIT_DIPSWITCH, &Cpi01A    , "dip"       },
 	{"Dip B"            , BIT_DIPSWITCH, &Cpi01C    , "dip"       },
 	{"Dip C"            , BIT_DIPSWITCH, &Cpi01E    , "dip"       },
@@ -4486,9 +4486,21 @@ static struct BurnDIPInfo Sf2mixDIPList[]=
 
 	// Dip B
 	CPS1_DIFFICULTY_1(0x1c)
-	{0   , 0xfe, 0   , 2   , "Complete Mode"           },
+	{0   , 0xfe, 0   , 2   , "Complete Mode"          },
 	{0x1c, 0x01, 0x08, 0x00, "Off"                    },
 	{0x1c, 0x01, 0x08, 0x08, "On"                     },
+	
+	{0   , 0xfe, 0   , 2   , "Disable Classic Mode"   },
+	{0x1c, 0x01, 0x10, 0x00, "Off"                    },
+	{0x1c, 0x01, 0x10, 0x10, "On"                     },
+	
+	{0   , 0xfe, 0   , 2   , "Change between Rounds"  },
+	{0x1c, 0x01, 0x20, 0x00, "Off"                    },
+	{0x1c, 0x01, 0x20, 0x20, "On"                     },
+	
+	{0   , 0xfe, 0   , 2   , "SF2HF ROM SPEED"        },
+	{0x1c, 0x01, 0x40, 0x00, "Off"                    },
+	{0x1c, 0x01, 0x40, 0x40, "On"                     },
 	
 	// Dip C
 	{0   , 0xfe, 0   , 2   , "Free Play"              },
@@ -6465,6 +6477,34 @@ static struct BurnRomInfo CawingjRomDesc[] = {
 
 STD_ROM_PICK(Cawingj)
 STD_ROM_FN(Cawingj)
+
+static struct BurnRomInfo CawingjrRomDesc[] = {
+	{ "usnj_23.8f",    0x080000, 0xbbe45b1e, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "usnj_22.7f",    0x080000, 0x54872f9f, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+
+	{ "usn_01.3a",     0x080000, 0xc08ffb8b, BRF_GRA | CPS1_TILES },
+	{ "usn_02.4a",     0x080000, 0x37b1b27a, BRF_GRA | CPS1_TILES },
+	{ "usn_03.5a",     0x080000, 0x9f89a540, BRF_GRA | CPS1_TILES },
+	{ "usn_04.6a",     0x080000, 0x1f31f1d0, BRF_GRA | CPS1_TILES },
+
+	{ "usn_09.12f",    0x020000, 0x0eb8a1d4, BRF_PRG | CPS1_Z80_PROGRAM },
+
+	{ "usn_18.11c",    0x020000, 0x4a613a2c, BRF_SND | CPS1_OKIM6295_SAMPLES },
+	{ "usn_19.12c",    0x020000, 0x74584493, BRF_SND | CPS1_OKIM6295_SAMPLES },
+	
+	A_BOARD_PLDS
+	
+	{ "ara63b.1a",     0x000117, 0x3e049379, BRF_OPT },// b-board PLDs
+	{ "iob1.12d",      0x000117, 0x3abc0700, BRF_OPT },
+	{ "bprg1.11d",     0x000117, 0x31793da7, BRF_OPT },
+	
+	{ "ioc1.ic7",      0x000104, 0xa399772d, BRF_OPT },	// c-board PLDs
+	{ "c632.ic1",      0x000117, 0x0fbd9270, BRF_OPT },
+};
+
+
+STD_ROM_PICK(Cawingjr)
+STD_ROM_FN(Cawingjr)
 
 static struct BurnRomInfo CawingblRomDesc[] = {
 	{ "caw2.bin",      0x080000, 0x8125d3f0, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_BYTESWAP },	// caw2
@@ -16121,7 +16161,7 @@ static struct BurnRomInfo Area88rRomDesc[] = {
 	
 	A_BOARD_PLDS
 	
-	{ "ara63b.1a",     0x000117, 0xf5569c93, BRF_OPT },// b-board PLDs
+	{ "ara63b.1a",     0x000117, 0x3e049379, BRF_OPT },// b-board PLDs
 	{ "iob1.12d",      0x000117, 0x3abc0700, BRF_OPT },
 	{ "bprg1.11d",     0x000117, 0x31793da7, BRF_OPT },
 	
@@ -17232,6 +17272,7 @@ static const struct GameConfig ConfigTable[] =
 	{ "cawingu"       , CPS_B_05    , mapper_CA22B , 0, NULL                },
 	{ "cawingur1"     , CPS_B_16    , mapper_CA24B , 0, NULL                },
 	{ "cawingj"       , CPS_B_16    , mapper_CA22B , 0, NULL                },
+	{ "cawingjr"      , CPS_B_21_DEF, mapper_ARA63B, 0, NULL                },
 	{ "cawingbl"      , CPS_B_16    , mapper_CA24B , 0, NULL                },
 	{ "cawingb2"      , CPS_B_16    , mapper_CA24B , 0, NULL                },
 	{ "cworld2j"      , CPS_B_21_BT6, mapper_Q522B , 0, NULL                },
@@ -17433,6 +17474,7 @@ static const struct GameConfig ConfigTable[] =
 	{ "sf2v0042"      , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
 	{ "sf2v0043"      , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
 	{ "sf2gm"         , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
+	{ "sf2cre"        , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
 	{ "sf2dongb"      , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
 	{ "sf2acc"        , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
 	{ "sf2acca"       , CPS_B_21_DEF, mapper_S9263B, 0, NULL                },
@@ -17522,7 +17564,7 @@ static const struct GameConfig ConfigTable[] =
 	{ "striderfix"    , CPS_B_01    , mapper_ST24M1, 1, NULL                },
 	{ "unsquad"       , CPS_B_11    , mapper_AR24B , 0, NULL                },
 	{ "area88"        , CPS_B_11    , mapper_AR22B , 0, NULL                },
-	{ "area88r"       , CPS_B_21_DEF, mapper_AR22B , 0, NULL                },
+	{ "area88r"       , CPS_B_21_DEF, mapper_ARA63B, 0, NULL                },
 	{ "varth"         , CPS_B_04    , mapper_VA63B , 0, NULL                },
 	{ "varthr1"       , CPS_B_04    , mapper_VA63B , 0, NULL                },
 	{ "varthu"        , CPS_B_04    , mapper_VA63B , 0, NULL                },
@@ -22900,6 +22942,16 @@ struct BurnDriver BurnDrvCpsCawingj = {
 	&CpsRecalcPal, 0x1000, 384, 224, 4, 3
 };
 
+struct BurnDriver BurnDrvCpsCawingjr = {
+	"cawingjr", "cawing", NULL, NULL, "1990",
+	"U.S. Navy (Japan Resale Ver. 901130)\0", NULL, "Capcom", "CPS1",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAPCOM_CPS1, GBF_HORSHOOT, 0,
+	NULL, CawingjrRomInfo, CawingjrRomName, NULL, NULL, NULL, NULL, CawingInputInfo, CawingDIPInfo,
+	DrvInit, DrvExit, Cps1Frame, CpsRedraw, CpsAreaScan,
+	&CpsRecalcPal, 0x1000, 384, 224, 4, 3
+};
+
 struct BurnDriver BurnDrvCpsCawingbl = {
 	"cawingbl", "cawing", NULL, NULL, "1990",
 	"Carrier Air Wing (bootleg with 2xYM2203 + 2xMSM5205, set 1)\0", NULL, "bootleg", "CPS1",
@@ -26839,22 +26891,22 @@ struct BurnDriver BurnDrvCpsSf2hfsce = {
 // For more infomation, please visit: https://sf2mix.github.io/
 
 static struct BurnRomInfo sf2mixRomDesc[] = {
-	{ "smxe_23b.8f",   0x080000, 0xc1370215, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
-	{ "smx_22b.7f",    0x080000, 0x5b0566c8, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
-	{ "smx_21a.6f",    0x080000, 0xcb6ab274, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "smxe_23b.8f",   0x080000, 0x41877bf2, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "smx_22b.7f",    0x080000, 0xecc7e105, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "smx_21a.6f",    0x080000, 0x07fb17ea, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
 
 	{ "smx-1m.3a",     0x080000, 0xa8f70643, BRF_GRA | CPS1_TILES },
 	{ "smx-3m.5a",     0x080000, 0xf73f1913, BRF_GRA | CPS1_TILES },
 	{ "smx-2m.4a",     0x080000, 0xa80234b4, BRF_GRA | CPS1_TILES },
 	{ "smx-4m.6a",     0x080000, 0x4d910b53, BRF_GRA | CPS1_TILES },
-	{ "smx-5m.7a",     0x080000, 0x01ae6240, BRF_GRA | CPS1_TILES },
-	{ "smx-7m.9a",     0x080000, 0x88dea20a, BRF_GRA | CPS1_TILES },
-	{ "smx-6m.8a",     0x080000, 0x7ea140b2, BRF_GRA | CPS1_TILES },
-	{ "smx-8m.10a",    0x080000, 0xfbc81a7e, BRF_GRA | CPS1_TILES },
-	{ "smx-10m.3c",    0x080000, 0x78e86cf4, BRF_GRA | CPS1_TILES },
-	{ "smx-12m.5c",    0x080000, 0x2f8e6dc9, BRF_GRA | CPS1_TILES },
-	{ "smx-11m.4c",    0x080000, 0x70095fdc, BRF_GRA | CPS1_TILES },
-	{ "smx-13m.6c",    0x080000, 0xd14d18e5, BRF_GRA | CPS1_TILES },
+	{ "smx-5m.7a",     0x080000, 0x26a56c2c, BRF_GRA | CPS1_TILES },
+	{ "smx-7m.9a",     0x080000, 0x3a2c2e5f, BRF_GRA | CPS1_TILES },
+	{ "smx-6m.8a",     0x080000, 0xf71b978c, BRF_GRA | CPS1_TILES },
+	{ "smx-8m.10a",    0x080000, 0x8fe56540, BRF_GRA | CPS1_TILES },
+	{ "smx-10m.3c",    0x080000, 0xf352721f, BRF_GRA | CPS1_TILES },
+	{ "smx-12m.5c",    0x080000, 0x810c6499, BRF_GRA | CPS1_TILES },
+	{ "smx-11m.4c",    0x080000, 0x75d7c15c, BRF_GRA | CPS1_TILES },
+	{ "smx-13m.6c",    0x080000, 0x642c40e7, BRF_GRA | CPS1_TILES },
 
 	{ "smx_09.11a",    0x010000, 0xa379fdc5, BRF_PRG | CPS1_Z80_PROGRAM },
 
@@ -26875,7 +26927,7 @@ STD_ROM_FN(sf2mix)
 
 struct BurnDriver BurnDrvCpsSf2mix = {
 	"sf2mix", "sf2ce", NULL, NULL, "2025",
-	"Street Fighter II Mix (v1.4)\0", NULL, "hack", "CPS1",
+	"Street Fighter II Mix (v1.6)\0", NULL, "hack", "CPS1",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK, 2, HARDWARE_CAPCOM_CPS1, GBF_VSFIGHT, FBF_SF,
 	NULL, sf2mixRomInfo, sf2mixRomName, NULL, NULL, NULL, NULL, Sf2InputInfo, Sf2mixDIPInfo,
@@ -26967,6 +27019,55 @@ struct BurnDriver BurnDrvCpsSf2gm = {
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE | BDF_BOOTLEG | BDF_HACK | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAPCOM_CPS1, GBF_VSFIGHT, FBF_SF,
 	NULL, Sf2gmRomInfo, Sf2gmRomName, NULL, NULL, NULL, NULL, Sf2InputInfo, Sf2DIPInfo,
+	TwelveMhzInit, DrvExit, Cps1Frame, CpsRedraw, CpsAreaScan,
+	&CpsRecalcPal, 0x1000, 384, 224, 4, 3
+};
+
+// Street Fighter II': Champion Re-Edit (Hack, v0.29.7)
+// https://sf2cre.blogspot.com
+// Modified by Persona
+
+static struct BurnRomInfo Sf2creRomDesc[] = {
+	{ "sf2cre_23b.8f",	0x080000, 0xffa481c9, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "sf2cre_22b.7f",	0x080000, 0xe2944558, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+	{ "sf2cre_21a.6f",	0x080000, 0xc9c4acb8, BRF_ESS | BRF_PRG | CPS1_68K_PROGRAM_NO_BYTESWAP },
+
+	{ "s92_01.3a",		0x080000, 0x03b0d852, BRF_GRA | CPS1_TILES },
+	{ "s92_02.4a",		0x080000, 0x840289ec, BRF_GRA | CPS1_TILES },
+	{ "s92_03.5a",		0x080000, 0xcdb5f027, BRF_GRA | CPS1_TILES },
+	{ "s92_04.6a",		0x080000, 0xe2799472, BRF_GRA | CPS1_TILES },
+	{ "s92_05.7a",		0x080000, 0xba8a2761, BRF_GRA | CPS1_TILES },
+	{ "s92_06.8a",		0x080000, 0xe584bfb5, BRF_GRA | CPS1_TILES },
+	{ "s92_07.9a",		0x080000, 0x21e3f87d, BRF_GRA | CPS1_TILES },
+	{ "s92_08.10a",		0x080000, 0xbefc47df, BRF_GRA | CPS1_TILES },
+	{ "s92_10.3c",		0x080000, 0x960687d5, BRF_GRA | CPS1_TILES },
+	{ "s92_11.4c",		0x080000, 0x978ecd18, BRF_GRA | CPS1_TILES },
+	{ "s92_12.5c",		0x080000, 0xd6ec9a0a, BRF_GRA | CPS1_TILES },
+	{ "s92_13.6c",		0x080000, 0xed2c67f6, BRF_GRA | CPS1_TILES },
+
+	{ "s92_09.12a",		0x010000, 0x08f6b60e, BRF_PRG | CPS1_Z80_PROGRAM },
+
+	{ "s92_18.11c",		0x020000, 0x7f162009, BRF_SND | CPS1_OKIM6295_SAMPLES },
+	{ "s92_19.12c",		0x020000, 0xbeade53f, BRF_SND | CPS1_OKIM6295_SAMPLES },
+	
+	A_BOARD_PLDS
+	
+	{ "s9263b.1a",		0x000117, 0x0a7ecfe0, BRF_OPT },	// b-board PLDs
+	{ "iob1.12d",		0x000117, 0x3abc0700, BRF_OPT },
+	{ "bprg1.11d",		0x000117, 0x31793da7, BRF_OPT },
+	{ "ioc1.ic7",		0x000104, 0xa399772d, BRF_OPT },	// c-board PLDs
+	{ "c632.ic1",		0x000117, 0x0fbd9270, BRF_OPT },
+};
+
+STD_ROM_PICK(Sf2cre)
+STD_ROM_FN(Sf2cre)
+
+struct BurnDriver BurnDrvCpsSf2cre = {
+	"sf2cre", "sf2ce", NULL, NULL, "2025",
+	"Street Fighter II': Champion Re-Edit (Hack, v0.29.7)\0", NULL, "Persona", "CPS1",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK | BDF_HISCORE_SUPPORTED, 2, HARDWARE_CAPCOM_CPS1, GBF_VSFIGHT, FBF_SF,
+	NULL, Sf2creRomInfo, Sf2creRomName, NULL, NULL, NULL, NULL, Sf2InputInfo, Sf2cejDIPInfo,
 	TwelveMhzInit, DrvExit, Cps1Frame, CpsRedraw, CpsAreaScan,
 	&CpsRecalcPal, 0x1000, 384, 224, 4, 3
 };

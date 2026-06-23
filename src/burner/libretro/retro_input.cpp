@@ -80,6 +80,8 @@ UINT32 nDiagInputHoldCounter = 0;
 #define RETRO_DEVICE_ID_FIRE09 RETRO_DEVICE_ID_JOYPAD_R3
 #define RETRO_DEVICE_ID_FIRE10 RETRO_DEVICE_ID_JOYPAD_L3
 
+#define ENABLE_2_AND_3_BUTTONS_MACROS 0
+
 void SetDiagInpHoldFrameDelay(unsigned val)
 {
 	nDiagInputHoldFrameDelay = val;
@@ -322,7 +324,7 @@ static void AnalyzeGameLayout()
 			nMacroCount++;
 			pgi++;
 		}
-#if 0
+#if ENABLE_2_AND_3_BUTTONS_MACROS
 		if (nRealFireButtons <= 3)
 		{
 			if (nRealFireButtons >= 2 && (HW_MISC || HW_NES))
@@ -626,6 +628,8 @@ static INT32 GameInpAnalog2RetroInpAnalog(struct GameInp* pgi, unsigned port, un
 			descriptor.port = port;
 			descriptor.device = (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON ? RETRO_DEVICE_JOYPAD : RETRO_DEVICE_ANALOG);
 			descriptor.index = (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON ? 0 : index);
+			if (index == RETRO_DEVICE_INDEX_ANALOG_BUTTON)
+				bDigitalMappingDone[port][id] = true;
 			descriptor.id = id;
 			descriptor.description = szn;
 			normal_input_descriptors.push_back(descriptor);
@@ -795,30 +799,6 @@ static INT32 GameInpSpecialOne(struct GameInp* pgi, INT32 nPlayer, char* szb, ch
 	const char * parentrom	= BurnDrvGetTextA(DRV_PARENT);
 	const char * drvname	= BurnDrvGetTextA(DRV_NAME);
 	int nHardwareCode = BurnDrvGetHardwareCode();
-
-	if (strncmp("Volume", description, 6) == 0)
-	{
-		if ((parentrom && strcmp(parentrom, "revx") == 0) ||
-			(drvname && strcmp(drvname, "revx") == 0)
-		) {
-			// revx needs this to navigate diagnostic menu
-			if (strcmp("Volume Up", description) == 0) {
-				GameInpDigital2RetroInpKey(pgi, nPlayer, RETRO_DEVICE_ID_JOYPAD_R3, description);
-			}
-			if (strcmp("Volume Down", description) == 0) {
-				GameInpDigital2RetroInpKey(pgi, nPlayer, RETRO_DEVICE_ID_JOYPAD_L3, description);
-			}
-		} else {
-			// We don't map volume buttons
-			pgi->nInput = GIT_SWITCH;
-			if (!bInputInitialized) {
-				pgi->Input.Switch.nCode = (UINT16)(nSwitchCode++);
-				HandleMessage(RETRO_LOG_DEBUG, "[FBNeo] nSwitchCode 0x%02X : P%d %s (not mapped)\n", pgi->Input.Switch.nCode, nPlayer+1, szn);
-			}
-			bButtonMapped = true;
-			return 0;
-		}
-	}
 
 	// This one is such a special case : "Lucky & Wild" has 2 x-axis inputs, and we don't want the steering one to be caught by the pointer/lightgun/mouse logic
 	if ((parentrom && strcmp(parentrom, "luckywld") == 0) ||
@@ -1029,10 +1009,16 @@ static INT32 GameInpSpecialOne(struct GameInp* pgi, INT32 nPlayer, char* szb, ch
 
 	// Space Duel
 	// Scud Hammer
+	// Invinco / Head On 2
+	// Invinco / Deep Scan
 	if ((parentrom && strcmp(parentrom, "spacduel") == 0) ||
 		(drvname && strcmp(drvname, "spacduel") == 0) ||
 		(parentrom && strcmp(parentrom, "scudhamm") == 0) ||
-		(drvname && strcmp(drvname, "scudhamm") == 0)
+		(drvname && strcmp(drvname, "scudhamm") == 0) ||
+		(parentrom && strcmp(parentrom, "invds") == 0) ||
+		(drvname && strcmp(drvname, "invds") == 0) ||
+		(parentrom && strcmp(parentrom, "invho2") == 0) ||
+		(drvname && strcmp(drvname, "invho2") == 0)
 	) {
 		if (strcmp("Select", description) == 0) {
 			GameInpDigital2RetroInpKey(pgi, nPlayer, RETRO_DEVICE_ID_JOYPAD_R3, description);
@@ -1771,8 +1757,11 @@ static INT32 GameInpSpecialOne(struct GameInp* pgi, INT32 nPlayer, char* szb, ch
 	}
 
 	// Hot Rod
+	// Road Blasters
 	if ((parentrom && strcmp(parentrom, "hotrod") == 0) ||
-		(drvname && strcmp(drvname, "hotrod") == 0)
+		(drvname && strcmp(drvname, "hotrod") == 0) ||
+		(parentrom && strcmp(parentrom, "roadblst") == 0) ||
+		(drvname && strcmp(drvname, "roadblst") == 0)
 	) {
 		if (strcmp("Accelerator", description) == 0) {
 			GameInpAnalog2RetroInpAnalog(pgi, nPlayer, RETRO_DEVICE_ID_JOYPAD_R2, RETRO_DEVICE_INDEX_ANALOG_BUTTON, description);
@@ -1886,6 +1875,18 @@ static INT32 GameInpSpecialOne(struct GameInp* pgi, INT32 nPlayer, char* szb, ch
 		}
 		if (strcmp("Aim Analog", description) == 0) {
 			GameInpAnalog2RetroInpAnalog(pgi, nPlayer, RETRO_DEVICE_ID_ANALOG_Y, RETRO_DEVICE_INDEX_ANALOG_RIGHT, description);
+		}
+	}
+
+	// Tron
+	if ((parentrom && strcmp(parentrom, "tron") == 0) ||
+		(drvname && strcmp(drvname, "tron") == 0)
+	) {
+		if (strcmp("Dial", description) == 0) {
+			GameInpAnalog2RetroInpAnalog(pgi, nPlayer, RETRO_DEVICE_ID_ANALOG_X, RETRO_DEVICE_INDEX_ANALOG_RIGHT, description);
+		}
+		if (strcmp("Button 1", description) == 0) {
+			GameInpDigital2RetroInpKey(pgi, nPlayer, RETRO_DEVICE_ID_JOYPAD_R, description);
 		}
 	}
 
@@ -2130,7 +2131,7 @@ static INT32 GameInpSpecialOne(struct GameInp* pgi, INT32 nPlayer, char* szb, ch
 		if (strncmp("Buttons CD", description, 10) == 0)
 			GameInpDigital2RetroInpKey(pgi, nPlayer, RETRO_DEVICE_ID_FIRE06, description, RETRO_DEVICE_JOYPAD, GIT_MACRO_AUTO);
 	}
-#if 0
+#if ENABLE_2_AND_3_BUTTONS_MACROS
 	// This code will assign macros to the next unmapped retropad buttons based on order preference from the device type
 	// However, is it really ok ? Disabled for now
 	if (nRealFireButtons == 2 || nRealFireButtons == 3) {
@@ -2786,6 +2787,13 @@ static INT32 GameInpOtherOne(struct GameInp* pgi, char* szi, char *szn)
 		}
 	}
 
+	// Sega Y-Board require this to navigate in service menu
+	if ((nHardwareCode & HARDWARE_PUBLIC_MASK) == HARDWARE_SEGA_SYSTEMY) {
+		if (strcmp("Service", szn) == 0) {
+			GameInpDigital2RetroInpKey(pgi, 0, RETRO_DEVICE_ID_JOYPAD_R3, szn);
+		}
+	}
+
 	// Some cv1k games require this for special mode
 	if ((nHardwareCode & HARDWARE_PUBLIC_MASK) == HARDWARE_CAVE_CV1000) {
 		if (strcmp("Service", szn) == 0) {
@@ -2832,6 +2840,17 @@ static INT32 GameInpOtherOne(struct GameInp* pgi, char* szi, char *szn)
 		(drvname && strcmp(drvname, "pulirula") == 0)) {
 		if (strcmp("Service", szn) == 0) {
 			GameInpDigital2RetroInpKey(pgi, 0, RETRO_DEVICE_ID_JOYPAD_R3, szn);
+		}
+	}
+
+	// revx needs this to navigate diagnostic menu
+	if ((parentrom && strcmp(parentrom, "revx") == 0) ||
+		(drvname && strcmp(drvname, "revx") == 0)) {
+		if (strcmp(szi, "volumeup") == 0) {
+			GameInpDigital2RetroInpKey(pgi, 0, RETRO_DEVICE_ID_JOYPAD_R3, szn);
+		}
+		if (strcmp(szi, "volumedown") == 0) {
+			GameInpDigital2RetroInpKey(pgi, 0, RETRO_DEVICE_ID_JOYPAD_L3, szn);
 		}
 	}
 
@@ -3416,6 +3435,21 @@ void InputMake(void)
 				if (pgi->nType == BIT_ANALOG_REL) {
 					nJoy *= nAnalogSpeed;
 					nJoy >>= 13;
+
+					// -- Deadzone handling --
+					// Scale Deadzone to the Speed.  200 seems perfect for thumbsticks @ default speed
+					const INT32 nDeadZone = 200 * nAnalogSpeed / 256;
+
+					nJoy = AnalogDeadZone(nJoy, nDeadZone);
+
+					// dinkNOTE: at 0x100 analog speed, it returns +-824,
+					// but some axis return +-820.
+
+					const INT32 scale_to = (32767 * nAnalogSpeed) >> 13;
+					const INT32 scale_from = scale_to - nDeadZone;
+
+					// note: negative numbers are 1 more than their positive counterpart
+					nJoy = scalerangei(nJoy, -(scale_from + 1), scale_from, -(scale_to + 1), scale_to);
 
 					// Clip axis to 8 bits
 					if (nJoy < -32768) {

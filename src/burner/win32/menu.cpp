@@ -19,6 +19,9 @@ static HMENU hAudioPluginMenu[8] = {NULL, };
 bool bMenuDisplayed = false;
 bool bModelessMenu  = false;
 bool bAdaptivepopup = false;
+
+bool szPrevGamesNeedsUpdate = true;
+
 int nLastMenu = 0;
 static int nRecursions = -1;
 static HMENU hCurrentMenu;
@@ -489,6 +492,8 @@ int MenuCreate()
 	TCHAR szButtonText[32];
 	MENUITEMINFO menuItemInfo;
 	MENUINFO menu;
+
+	szPrevGamesNeedsUpdate = true;
 
 	if (hMenu == NULL) {
 		hMenu = FBALoadMenu(hAppInst, MAKEINTRESOURCE(IDR_MENU));					// Main application menu
@@ -1295,66 +1300,77 @@ void MenuUpdate()
 	var = (bIconsByHardwares) ? MENU_ICONS_BY_HARDWARE : MENU_ICONS_BY_GAME;
 	CheckMenuRadioItem(hMenu, MENU_ICONS_BY_GAME, MENU_ICONS_BY_HARDWARE, var, MF_BYCOMMAND);
 
-	// Previous games list
-	for (int i = 0; i < SHOW_PREV_GAMES; i++) {
-		MENUITEMINFO menuItemInfo;
-		TCHAR szText[256] = _T("");
-		int OldDrvSelect = nBurnDrvActive;
+	if (szPrevGamesNeedsUpdate) {
+		szPrevGamesNeedsUpdate = false;
 
-		memset(&menuItemInfo, 0, sizeof(MENUITEMINFO));
-		menuItemInfo.cbSize = sizeof(MENUITEMINFO);
-		menuItemInfo.fType = MFT_STRING;
-		menuItemInfo.fMask = MIIM_TYPE;
+		// Previous games list
+		for (int i = 0; i < SHOW_PREV_GAMES; i++) {
+			MENUITEMINFO menuItemInfo;
+			TCHAR szText[256] = _T("");
+			int OldDrvSelect = nBurnDrvActive;
 
-		if (_tcslen(szPrevGames[i])) {
-			// Find RomData directory (recursive or not depending on settings)
-			TCHAR szDatFile[MAX_PATH] = { 0 };
-			if (FindZipNameFromDats(szAppRomdataPath, TCHARToANSI(szPrevGames[i], NULL, 0), szDatFile)) {
-				_stprintf(szText, _T("%s\t%s"), RomdataGetFullName(szDatFile), szPrevGames[i]);
-			} else {
+			memset(&menuItemInfo, 0, sizeof(MENUITEMINFO));
+			menuItemInfo.cbSize = sizeof(MENUITEMINFO);
+			menuItemInfo.fType = MFT_STRING;
+			menuItemInfo.fMask = MIIM_TYPE;
+
+			if (_tcslen(szPrevGames[i])) {
+
+				// First we'll check the internal fbneo-database for szPrevGames[] resolution
+				bool found = false;
 				for (unsigned int j = 0; j < nBurnDrvCount; j++) {
 					nBurnDrvActive = j;
 					if (!_tcsicmp(szPrevGames[i], BurnDrvGetText(DRV_NAME))) {
 						_stprintf(szText, _T("%s\t%s"), BurnDrvGetText(DRV_FULLNAME), BurnDrvGetText(DRV_NAME));
-
+						found = true;
 						break;
 					}
 				}
-			}
+				nBurnDrvActive = OldDrvSelect;
 
-			// Check for &s and change to &&
-			TCHAR szText2[256] = _T("");
-			TCHAR *Tokens = NULL;
-			int NumTokens = 0;
-
-			Tokens = _tcstok(szText, _T("&"));
-			while (Tokens != NULL) {
-				if (NumTokens) {
-					_stprintf(szText2, _T("%s&&%s"), szText2, Tokens);
-				} else {
-					_stprintf(szText2, _T("%s"), Tokens);
+				// If it's not found, attempt to resolve via RomData
+				if (found == false) {
+					// Find RomData directory (recursive or not depending on settings)
+					TCHAR szDatFile[MAX_PATH] = { 0 };
+					if (FindZipNameFromDats(szAppRomdataPath, TCHARToANSI(szPrevGames[i], NULL, 0), szDatFile)) {
+						_stprintf(szText, _T("%s\t%s"), RomdataGetFullName(szDatFile), szPrevGames[i]);
+					}
 				}
 
-				Tokens = _tcstok(NULL, _T("&"));
-				NumTokens++;
+				// Check for &s and change to &&
+				TCHAR szText2[256] = _T("");
+				TCHAR *Tokens = NULL;
+				int NumTokens = 0;
+
+				Tokens = _tcstok(szText, _T("&"));
+				while (Tokens != NULL) {
+					if (NumTokens) {
+						_stprintf(szText2, _T("%s&&%s"), szText2, Tokens);
+					} else {
+						_stprintf(szText2, _T("%s"), Tokens);
+					}
+
+					Tokens = _tcstok(NULL, _T("&"));
+					NumTokens++;
+				}
+
+				menuItemInfo.dwTypeData = szText2;
+				menuItemInfo.cch = _tcslen(szText2);
+
+				SetMenuItemInfo(hMenu, MENU_PREVIOUSGAMES1 + i, FALSE, &menuItemInfo);
+				EnableMenuItem(hMenu, MENU_PREVIOUSGAMES1 + i, MF_ENABLED | MF_BYCOMMAND);
+			} else {
+				_tcscpy(szText, FBALoadStringEx(hAppInst, IDS_MENU_6, true));
+
+				menuItemInfo.dwTypeData = szText;
+				menuItemInfo.cch = _tcslen(szText);
+
+				SetMenuItemInfo(hMenu, MENU_PREVIOUSGAMES1 + i, FALSE, &menuItemInfo);
+				EnableMenuItem(hMenu, MENU_PREVIOUSGAMES1 + i, MF_GRAYED | MF_BYCOMMAND);
 			}
 
-			menuItemInfo.dwTypeData = szText2;
-			menuItemInfo.cch = _tcslen(szText2);
-
-			SetMenuItemInfo(hMenu, MENU_PREVIOUSGAMES1 + i, FALSE, &menuItemInfo);
-			EnableMenuItem(hMenu, MENU_PREVIOUSGAMES1 + i, MF_ENABLED | MF_BYCOMMAND);
-		} else {
-			_tcscpy(szText, FBALoadStringEx(hAppInst, IDS_MENU_6, true));
-
-			menuItemInfo.dwTypeData = szText;
-			menuItemInfo.cch = _tcslen(szText);
-
-			SetMenuItemInfo(hMenu, MENU_PREVIOUSGAMES1 + i, FALSE, &menuItemInfo);
-			EnableMenuItem(hMenu, MENU_PREVIOUSGAMES1 + i, MF_GRAYED | MF_BYCOMMAND);
+			nBurnDrvActive = OldDrvSelect;
 		}
-
-		nBurnDrvActive = OldDrvSelect;
 	}
 
 #if !defined BUILD_X86_ASM
@@ -1555,15 +1571,106 @@ void MenuEnableItems()
 		if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
 			EnableMenuItem(hMenu, MENU_INTERPOLATE_1,				MF_GRAYED | MF_BYCOMMAND);
 			EnableMenuItem(hMenu, MENU_INTERPOLATE_3,				MF_GRAYED | MF_BYCOMMAND);
+		}
 
+		if (HasMemCard()) {
 			if (!kNetGame) {
-				EnableMenuItem(hMenu, MENU_MEMCARD_CREATE,			MF_ENABLED | MF_BYCOMMAND);
-				EnableMenuItem(hMenu, MENU_MEMCARD_SELECT,			MF_ENABLED | MF_BYCOMMAND);
-				if (nMemoryCardStatus & 1) {
-					if (nMemoryCardStatus & 2) {
-						EnableMenuItem(hMenu, MENU_MEMCARD_EJECT,	MF_ENABLED | MF_BYCOMMAND);
-					} else {
-						EnableMenuItem(hMenu, MENU_MEMCARD_INSERT,	MF_ENABLED | MF_BYCOMMAND);
+#ifdef BUILD_PGM2
+				if (IsPGM2WithCards()) {
+					// PGM2 per-slot: dynamically rebuild "Memory Card..." submenu
+					static HMENU hPgm2CardPopup = NULL;
+
+					// Find the Memory Card popup (first time or after menu reset)
+					if (!hPgm2CardPopup || !IsMenu(hPgm2CardPopup)) {
+						hPgm2CardPopup = NULL;
+						HMENU hGameMenu = GetSubMenu(hMenu, 0);
+						if (hGameMenu) {
+							int nItems = GetMenuItemCount(hGameMenu);
+							for (int i = 0; i < nItems && !hPgm2CardPopup; i++) {
+								HMENU hSub = GetSubMenu(hGameMenu, i);
+								if (!hSub) continue;
+								int nSubItems = GetMenuItemCount(hSub);
+								for (int j = 0; j < nSubItems; j++) {
+									UINT nID = GetMenuItemID(hSub, j);
+									if (nID == MENU_MEMCARD_CREATE || nID == MENU_MEMCARD_PGM2_ID(0, 0)) {
+										hPgm2CardPopup = hSub;
+										break;
+									}
+									// Check nested submenus
+									HMENU hSub2 = GetSubMenu(hSub, j);
+									if (hSub2) {
+										int nSub2Items = GetMenuItemCount(hSub2);
+										for (int k = 0; k < nSub2Items; k++) {
+											UINT nID2 = GetMenuItemID(hSub2, k);
+											if (nID2 == MENU_MEMCARD_CREATE || nID2 == MENU_MEMCARD_PGM2_ID(0, 0)) {
+												hPgm2CardPopup = hSub2;
+												break;
+											}
+										}
+									}
+									if (hPgm2CardPopup) break;
+								}
+							}
+						}
+					}
+
+					if (hPgm2CardPopup) {
+						// Clear existing items
+						while (GetMenuItemCount(hPgm2CardPopup) > 0) {
+							DeleteMenu(hPgm2CardPopup, 0, MF_BYPOSITION);
+						}
+
+						// Build per-player submenus
+						TCHAR szBuf[128];
+						for (int s = 0; s < Pgm2MaxCardSlots; s++) {
+							HMENU hSlotMenu = CreatePopupMenu();
+							AppendMenu(hSlotMenu, MF_STRING, MENU_MEMCARD_PGM2_ID(s, 0), FBALoadStringEx(hAppInst, IDS_MEMCARD_CREATE, true));
+							AppendMenu(hSlotMenu, MF_STRING, MENU_MEMCARD_PGM2_ID(s, 1), FBALoadStringEx(hAppInst, IDS_MEMCARD_SELECT, true));
+							AppendMenu(hSlotMenu, MF_STRING, MENU_MEMCARD_PGM2_ID(s, 2), FBALoadStringEx(hAppInst, IDS_MEMCARD_INSERT, true));
+							AppendMenu(hSlotMenu, MF_STRING, MENU_MEMCARD_PGM2_ID(s, 3), FBALoadStringEx(hAppInst, IDS_MEMCARD_EJECT,  true));
+
+							// Enable/disable based on per-slot state
+							if (nPgm2CardStatus[s] & 1) {
+								if (nPgm2CardStatus[s] & 2) {
+									// Inserted: gray Insert, enable Eject
+									EnableMenuItem(hSlotMenu, MENU_MEMCARD_PGM2_ID(s, 2), MF_GRAYED | MF_BYCOMMAND);
+								} else {
+									// File selected but not inserted: enable Insert, gray Eject
+									EnableMenuItem(hSlotMenu, MENU_MEMCARD_PGM2_ID(s, 3), MF_GRAYED | MF_BYCOMMAND);
+								}
+							} else {
+								// No file: gray both Insert and Eject
+								EnableMenuItem(hSlotMenu, MENU_MEMCARD_PGM2_ID(s, 2), MF_GRAYED | MF_BYCOMMAND);
+								EnableMenuItem(hSlotMenu, MENU_MEMCARD_PGM2_ID(s, 3), MF_GRAYED | MF_BYCOMMAND);
+							}
+
+							// Build menu title with card filename if available
+							if (nPgm2CardStatus[s] & 1) {
+								TCHAR* pFileName = _tcsrchr(szPgm2CardFile[s], _T('\\'));
+								if (!pFileName) pFileName = _tcsrchr(szPgm2CardFile[s], _T('/'));
+								if (pFileName) pFileName++; else pFileName = szPgm2CardFile[s];
+								if (nPgm2CardStatus[s] & 2) {
+									_stprintf(szBuf, _T("P%d %s [%s] *"), s + 1, FBALoadStringEx(hAppInst, IDS_MEMCARD, true), pFileName);
+								} else {
+									_stprintf(szBuf, _T("P%d %s [%s]"), s + 1, FBALoadStringEx(hAppInst, IDS_MEMCARD, true), pFileName);
+								}
+							} else {
+								_stprintf(szBuf, _T("P%d %s"), s + 1, FBALoadStringEx(hAppInst, IDS_MEMCARD, true));
+							}
+							AppendMenu(hPgm2CardPopup, MF_POPUP, (UINT_PTR)hSlotMenu, szBuf);
+						}
+					}
+				} else
+#endif
+				{
+					EnableMenuItem(hMenu, MENU_MEMCARD_CREATE,			MF_ENABLED | MF_BYCOMMAND);
+					EnableMenuItem(hMenu, MENU_MEMCARD_SELECT,			MF_ENABLED | MF_BYCOMMAND);
+					if (nMemoryCardStatus & 1) {
+						if (nMemoryCardStatus & 2) {
+							EnableMenuItem(hMenu, MENU_MEMCARD_EJECT,	MF_ENABLED | MF_BYCOMMAND);
+						} else {
+							EnableMenuItem(hMenu, MENU_MEMCARD_INSERT,	MF_ENABLED | MF_BYCOMMAND);
+						}
 					}
 				}
 			}
@@ -1582,7 +1689,13 @@ void MenuEnableItems()
 			EnableMenuItem(hMenu, MENU_RESETCPUCLOCK,	MF_GRAYED | MF_BYCOMMAND);
 			EnableMenuItem(hMenu, MENU_PAUSE,			MF_GRAYED | MF_BYCOMMAND);
 			EnableMenuItem(hMenu, MENU_RESET,			MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_ENABLECHEAT,		MF_GRAYED | MF_BYCOMMAND);
+			if (nKailleraCheatEnableHack) {
+				if (pCheatInfo) {
+					EnableMenuItem(hMenu, MENU_ENABLECHEAT, MF_ENABLED | MF_BYCOMMAND);
+				}
+			} else {
+				EnableMenuItem(hMenu, MENU_ENABLECHEAT,		MF_GRAYED | MF_BYCOMMAND);
+			}
 			EnableMenuItem(hMenu, MENU_SNAPFACT,		MF_GRAYED | MF_BYCOMMAND);
 		} else {
 			EnableMenuItem(hMenu, MENU_LOAD,			MF_ENABLED | MF_BYCOMMAND);

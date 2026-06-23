@@ -202,7 +202,7 @@ static char* CreateKailleraList()
 					if (pNewList == NULL) {
 						return NULL;
 					}
-					pName -= (INT_PTR)pList;
+					pName -= (INT_PTR)pList; // this pointer-math is OK, don't worry.
 					pList = pNewList;
 					pName += (INT_PTR)pList;
 				}
@@ -838,6 +838,7 @@ static t_hw_Struct scrn_gamehw_cfg[] = {
 	{ "cps2",		{ HARDWARE_CAPCOM_CPS2, 0 } },
 	{ "cps3",		{ HARDWARE_CAPCOM_CPS3, 0 } },
 	{ "pgm",		{ HARDWARE_IGS_PGM, 0 } },
+	{ "pgm2",		{ HARDWARE_IGS_PGM2, 0 } },
 	{ "neogeo",		{ HARDWARE_SNK_NEOGEO, HARDWARE_SNK_MVS, HARDWARE_SNK_DEDICATED_PCB, 0 } },
 	{ "neogeocd",	{ HARDWARE_SNK_NEOCD, 0 } },
 	{ "arcade",		{ ~0, 0 } }, // default, if not found above
@@ -916,12 +917,57 @@ static void HandleBezelLoading(HWND hWnd, int cx, int cy)
 			}
 		}
 
-		if (fp) {
+		bool bFromZip = false;
+		size_t pngbufsize = 0;
+		void *pngbuf = NULL;
+
+		if (!fp) {
+			char szImageName[MAX_PATH];
+			char szZipName[MAX_PATH];
+			//char *szAnsiPath = TCHARToANSI(szPath, NULL, 0);
+
+			snprintf(szZipName, sizeof(szZipName), "support/bezel/bezel.zip");
+			snprintf(szImageName, sizeof(szImageName), "bezel/%s.png", BurnDrvGetTextA(DRV_NAME));
+			strcpy(szName, szImageName);
+
+			bool bExists = unzip_file_exists(szZipName, szImageName);
+
+			if (bExists == false && BurnDrvGetText(DRV_PARENT)) {
+				// try parent
+				snprintf(szImageName, sizeof(szImageName), "bezel/%s.png", BurnDrvGetTextA(DRV_PARENT));
+				strcpy(szName, szImageName);
+				bExists = unzip_file_exists(szZipName, szImageName);
+			}
+			if (bExists == false) {
+				// File doesn't exist, try to use system bezel
+				pszName = ScrnGetHWString(BurnDrvGetHardwareCode());
+
+				if (pszName != NULL) {
+					if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) {
+						snprintf(szImageName, sizeof(szImageName), "bezel/%s_v.png", pszName);
+					} else {
+						snprintf(szImageName, sizeof(szImageName), "bezel/%s.png", pszName);
+					}
+					strcpy(szName, szImageName);
+				}
+			}
+
+			bFromZip = unzip(szZipName, szImageName, &pngbuf, &pngbufsize);
+		}
+
+		if (fp || bFromZip) {
 			bprintf(0, _T("Loading bezel \"%S\"\n"), szName);
-			hBezelBitmap = PNGLoadBitmap(hWnd, fp, cx, cy - nMenuHeight, 0);
+			if (fp) {
+				hBezelBitmap = PNGLoadBitmap(hWnd, fp, cx, cy - nMenuHeight, 0);
+			} else {
+				hBezelBitmap = PNGLoadBitmapBuffer(hWnd, pngbuf, pngbufsize, cx, cy - nMenuHeight, 0);
+				free(pngbuf);
+				pngbuf = NULL;
+				pngbufsize = 0;
+			}
 			nBezelCacheX = cx;
 			nBezelCacheY = cy - nMenuHeight;
-			fclose(fp);
+			if (fp) fclose(fp);
 		}
 	}
 }
@@ -1017,12 +1063,16 @@ static void UpdatePreviousGameList()
 			}
 			break;
 	}
+
+	szPrevGamesNeedsUpdate = true;
 }
 
 static bool bSramLoad = true; // always true, unless BurnerLoadDriver() is called from StartFromReset()
 
-static void QuitGame() {
+static void QuitGame()
+{
 	AudBlankSound();
+
 	if (nVidFullscreen) {
 		nVidFullscreen = 0;
 		VidExit();
@@ -1070,6 +1120,8 @@ int BurnerLoadDriver(TCHAR *pszDriverName)
 	}
 	if (nDrvIdx < 0)
 		return -1;
+
+	memset(szRomdataName, 0, sizeof(szRomdataName));
 	if (bCurrentRD) {
 		_tcscpy(szRomdataName, szBackup);
 		RomDataInit();
@@ -1163,9 +1215,9 @@ static bool NgcdVerifyPath(const TCHAR* pszSelCue)
 	}
 
 	const TCHAR* pszExt = _tcsrchr(pszSelCue, _T('.'));
-	if (NULL == pszExt || (0 != _tcsicmp(_T(".cue"), pszExt))) {
+	if (NULL == pszExt || ((0 != _tcsicmp(_T(".cue"), pszExt)) && (0 != _tcsicmp(_T(".chd"), pszExt)))) {
 		FBAPopupAddText(PUF_TEXT_DEFAULT, _T("NeoGeo CD: %s\n\n"), pszSelCue);
-		FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_FILE_EXTENSION), pszExt, _T(".cue"));
+		FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_FILE_EXTENSION), pszExt, _T(".cue, .chd"));
 		FBAPopupDisplay(PUF_TYPE_ERROR);
 		return false;
 	}
@@ -1512,8 +1564,9 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 					break;
 
 				case 3:
-					pszFilter = _T(" (*.cue)\0*.cue\0\0");
+					pszFilter = _T(" (*.cue,*.chd)\0*.cue;*.chd\0\0");
 					nStringID = IDS_DISK_FILE_NEOGEOCD;
+					nStrLen   = 28;
 					break;
 
 				case 4:
@@ -1589,10 +1642,10 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 
 		case MENU_CDIMAGE: {
 			nCDEmuSelect = 0;
-			TCHAR szFilter[100];
+			TCHAR szFilter[100] = { 0 };
 			_stprintf(szFilter, _T("%s"), FBALoadStringEx(hAppInst, IDS_CD_SELECT_FILTER, true));
-			memcpy(szFilter + _tcslen(szFilter), _T(" (*.ccd,*.cue)\0*.ccd;*.cue\0\0"), 28 * sizeof(TCHAR));
-			TCHAR szTitle[100];
+			memcpy(szFilter + _tcslen(szFilter), _T(" (*.ccd,*.cue,*.chd)\0*.ccd;*.cue;*.chd\0\0"), 39 * sizeof(TCHAR));
+			TCHAR szTitle[100] = { 0 };
 			_stprintf(szTitle, _T("%s"), FBALoadStringEx(hAppInst, IDS_CD_SELECT_IMAGE_TITLE, true));
 			if (UseDialogs() && !bDrvOkay) {
 				memset(&ofn, 0, sizeof(ofn));
@@ -1731,6 +1784,10 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			}
 			break;
 
+		case MENU_INPUT_REDETECT:
+			POST_INITIALISE_MESSAGE;
+			break;
+
 		case MENU_DIPSW:
 			AudBlankSound();
 			if (UseDialogs()) {
@@ -1751,7 +1808,7 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			break;
 
 		case MENU_MEMCARD_CREATE:
-			if (bDrvOkay && UseDialogs() && !kNetGame && (BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
+			if (bDrvOkay && UseDialogs() && !kNetGame && HasMemCard()) {
 				InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
 				AudBlankSound();
 				MemCardEject();
@@ -1761,7 +1818,7 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			}
 			break;
 		case MENU_MEMCARD_SELECT:
-			if (bDrvOkay && UseDialogs() && !kNetGame && (BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
+			if (bDrvOkay && UseDialogs() && !kNetGame && HasMemCard()) {
 				InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
 				AudBlankSound();
 				MemCardEject();
@@ -1771,20 +1828,56 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			}
 			break;
 		case MENU_MEMCARD_INSERT:
-			if (!kNetGame && (BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
+			if (!kNetGame && HasMemCard()) {
 				MemCardInsert();
 			}
 			break;
 		case MENU_MEMCARD_EJECT:
-			if (!kNetGame && (BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
+			if (!kNetGame && HasMemCard()) {
 				MemCardEject();
 			}
 			break;
 
 		case MENU_MEMCARD_TOGGLE:
-			if (bDrvOkay && !kNetGame && (BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOGEO) {
+			if (bDrvOkay && !kNetGame && HasMemCard()) {
 				MemCardToggle();
 			}
+			break;
+
+		// PGM2 per-slot card operations (IDs 10040..10055)
+		default:
+#ifdef BUILD_PGM2
+			if (id >= MENU_MEMCARD_PGM2_BASE && id < MENU_MEMCARD_PGM2_BASE + 16) {
+				int slot = (id - MENU_MEMCARD_PGM2_BASE) / 4;
+				int action = (id - MENU_MEMCARD_PGM2_BASE) % 4;
+				if (bDrvOkay && !kNetGame && IsPGM2WithCards() && slot < Pgm2MaxCardSlots) {
+					switch (action) {
+					case 0: // Create
+						InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
+						AudBlankSound();
+						MemCardEjectPGM2Slot(slot);
+						MemCardCreatePGM2Slot(slot);
+						MemCardInsertPGM2Slot(slot);
+						GameInpCheckMouse();
+						break;
+					case 1: // Select
+						InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
+						AudBlankSound();
+						MemCardEjectPGM2Slot(slot);
+						MemCardSelectPGM2Slot(slot);
+						MemCardInsertPGM2Slot(slot);
+						GameInpCheckMouse();
+						break;
+					case 2: // Insert
+						MemCardInsertPGM2Slot(slot);
+						break;
+					case 3: // Eject
+						MemCardEjectPGM2Slot(slot);
+						break;
+					}
+				}
+			}
+#endif
 			break;
 
 		case MENU_STATE_LOAD_DIALOG:
@@ -3929,6 +4022,10 @@ int ScrnSize()
 	int nGameAspectX = 4, nGameAspectY = 3;
 	int nMaxSize;
 
+	if (hScrnWnd == NULL || nVidFullscreen) {
+		return 1;
+	}
+
 	// SystemWorkArea = resolution of desktop
 	// RealWorkArea = resolution of desktop - taskbar (if avail)
 	RECT RealWorkArea;
@@ -3941,10 +4038,6 @@ int ScrnSize()
 	mi.cbSize = sizeof(mi);
 	GetMonitorInfo(monitor, &mi);
 	SystemWorkArea = mi.rcMonitor; // needs to be set to monitor's resolution for proper aspect calculation
-
-	if (hScrnWnd == NULL || nVidFullscreen) {
-		return 1;
-	}
 
 	if (bDrvOkay) {
 		if ((BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) && (nVidRotationAdjust & 1)) {
@@ -4277,4 +4370,13 @@ void Reinitialise()
 {
 	POST_INITIALISE_MESSAGE;
 	VidReInitialise();
+}
+
+// Reinit's video with new resolution and/or aspect ratio.
+// Note: doesn't re-create window like Reinitialise()
+void ReinitialiseVideo()
+{
+	VidReInitialise();
+	VidInit();
+	ScrnSize();
 }

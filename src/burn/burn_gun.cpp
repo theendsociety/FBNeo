@@ -655,6 +655,15 @@ void BurnGunInit(INT32 nNumPlayers, bool bDrawTargets)
 	TrackDefault = 0;
 }
 
+void BurnGunResolutionChanged()
+{
+	if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) {
+		BurnDrvGetVisibleSize(&nBurnGunMaxY, &nBurnGunMaxX);
+	} else {
+		BurnDrvGetVisibleSize(&nBurnGunMaxX, &nBurnGunMaxY);
+	}
+}
+
 void BurnGunExit()
 {
 #if defined FBNEO_DEBUG
@@ -715,6 +724,7 @@ void BurnGunDrawTarget(INT32 num, INT32 x, INT32 y)
 
 	if (bBurnGunDrawTargets == false) return; // game-configured setting
 	if (bBurnGunDrawReticles == false) return; // UI-configured setting
+	if (pBurnDraw == NULL) return; // nothing to draw to
 
 	if (num > MAX_GUNS - 1) return;
 

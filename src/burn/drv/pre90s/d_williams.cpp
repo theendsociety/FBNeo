@@ -2680,7 +2680,7 @@ struct BurnDriver BurnDrvStargate = {
 
 
 // Robotron: 2084 (Solid Blue label)
-/* Solid Blue labels, "B" type ROMs labeled 3005-13 through 3005-24 */
+/* "Release 5" Solid Blue labels, "B" type ROMs labeled 3005-13 through 3005-24 */
 
 static struct BurnRomInfo robotronRomDesc[] = {
 	{ "2084_rom_10b_3005-22.a7",		0x1000, 0x13797024, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2722,7 +2722,7 @@ struct BurnDriver BurnDrvRobotron = {
 
 
 // Robotron: 2084 (Yellow/Orange label)
-/* Yellow label / Red stripe & Black print or Yellow label / Red stripe & Green print "B" type ROMs numbered 3005-13 through 3005-24 */
+/* "Release 4" Yellow label / Red stripe & Black print or Yellow label / Red stripe & Green print "B" type ROMs numbered 3005-13 through 3005-24 */
 	
 static struct BurnRomInfo robotronyoRomDesc[] = {
 	{ "2084_rom_10b_3005-10.a7",		0x1000, 0x4a9d5f52, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
@@ -2753,6 +2753,43 @@ struct BurnDriver BurnDrvRobotronyo = {
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
 	NULL, robotronyoRomInfo, robotronyoRomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
+	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	292, 240, 4, 3
+};
+
+
+// Robotron: 2084 (Release 3)
+/* "Release 3" Censored prototype seen in the Robotron promo videotape, recovered from the Vid Kidz dev system */
+	
+static struct BurnRomInfo robotronr3RomDesc[] = {
+	{ "r3_10.a7",						0x1000, 0x1fb75828, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "r3_11.c7",						0x1000, 0xccfaf7da, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "r3_12.e7",						0x1000, 0xcfdc9990, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "r3_1.e4",						0x1000, 0x2e5433ee, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "r3_2.c4",						0x1000, 0x5bc6c614, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "r3_3.a4",						0x1000, 0x37962af2, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "r3_4.e5",						0x1000, 0x9c140843, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "r3_5.c5",						0x1000, 0x24726007, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "r3_6.a5",						0x1000, 0x097e174d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "r3_7.e6",						0x1000, 0x17a7ce34, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "r3_8.c6",						0x1000, 0xb6e8dbb9, 1 | BRF_PRG | BRF_ESS }, // 10
+	{ "r3_9.a6",						0x1000, 0xe7b53345, 1 | BRF_PRG | BRF_ESS }, // 11
+	
+	{ "video_sound_rom_3_std_767.ic12",	0x1000, 0xc56c1d28, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+
+	{ "decoder_rom_4.3g",				0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder_rom_6.3c",				0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
+};
+
+STD_ROM_PICK(robotronr3)
+STD_ROM_FN(robotronr3)
+
+struct BurnDriver BurnDrvRobotronr3 = {
+	"robotronr3", "robotron", NULL, NULL, "1982",
+	"Robotron: 2084 (Release 3)\0", NULL, "Williams / Vid Kidz", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, robotronr3RomInfo, robotronr3RomName, NULL, NULL, NULL, NULL, RobotronInputInfo, NULL,
 	RobotronInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
@@ -3267,6 +3304,11 @@ static struct BurnRomInfo alienarRomDesc[] = {
 	{ "aarom07",			0x1000, 0xf9812be4, 1 | BRF_PRG | BRF_ESS }, //  9
 	{ "aarom08",			0x1000, 0xcd7f3a87, 1 | BRF_PRG | BRF_ESS }, // 10
 	{ "aarom09",			0x1000, 0xe6ce77b4, 1 | BRF_PRG | BRF_ESS }, // 11
+
+	{ "sg.snd",				0x0800, 0x2fcf6c4d, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
+
+	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
+	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
 };
 
 STD_ROM_PICK(alienar)
@@ -3286,46 +3328,10 @@ static INT32 AlienarInit()
 
 struct BurnDriver BurnDrvAlienar = {
 	"alienar", NULL, NULL, NULL, "1985",
-	"Alien Arena\0", "Game has no sound", "Duncan Brown", "6809 System",
+	"Alien Arena\0", NULL, "Duncan Brown", "6809 System",
 	NULL, NULL, NULL, NULL,
 	BDF_GAME_WORKING, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
 	NULL, alienarRomInfo, alienarRomName, NULL, NULL, NULL, NULL, AlienarInputInfo, NULL,
-	AlienarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
-	292, 240, 4, 3
-};
-
-
-// Alien Arena (Stargate upgrade)
-
-static struct BurnRomInfo alienaruRomDesc[] = {
-	{ "aarom10",			0x1000, 0x6feb0314, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
-	{ "aarom11",			0x1000, 0xae3a270e, 1 | BRF_PRG | BRF_ESS }, //  1
-	{ "aarom12",			0x1000, 0x6be9f09e, 1 | BRF_PRG | BRF_ESS }, //  2
-	{ "aarom01",			0x1000, 0xbb0c21be, 1 | BRF_PRG | BRF_ESS }, //  3
-	{ "aarom02",			0x1000, 0x165acd37, 1 | BRF_PRG | BRF_ESS }, //  4
-	{ "aarom03",			0x1000, 0xe5d51d92, 1 | BRF_PRG | BRF_ESS }, //  5
-	{ "aarom04",			0x1000, 0x24f6feb8, 1 | BRF_PRG | BRF_ESS }, //  6
-	{ "aarom05",			0x1000, 0x5b1ac59b, 1 | BRF_PRG | BRF_ESS }, //  7
-	{ "aarom06",			0x1000, 0xda7195a2, 1 | BRF_PRG | BRF_ESS }, //  8
-	{ "aarom07",			0x1000, 0xf9812be4, 1 | BRF_PRG | BRF_ESS }, //  9
-	{ "aarom08",			0x1000, 0xcd7f3a87, 1 | BRF_PRG | BRF_ESS }, // 10
-	{ "aarom09",			0x1000, 0xe6ce77b4, 1 | BRF_PRG | BRF_ESS }, // 11
-
-	{ "sg.snd",				0x0800, 0x2fcf6c4d, 2 | BRF_PRG | BRF_ESS }, // 12 M6800 Code
-
-	{ "decoder.4",			0x0200, 0xe6631c23, 0 | BRF_OPT },           // 13 Address Decoder
-	{ "decoder.6",			0x0200, 0x83faf25e, 0 | BRF_OPT },           // 14
-};
-
-STD_ROM_PICK(alienaru)
-STD_ROM_FN(alienaru)
-
-struct BurnDriver BurnDrvAlienaru = {
-	"alienaru", "alienar", NULL, NULL, "1985",
-	"Alien Arena (Stargate upgrade)\0", NULL, "Duncan Brown", "6809 System",
-	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_CLONE, 2, HARDWARE_MISC_PRE90S, GBF_ACTION, 0,
-	NULL, alienaruRomInfo, alienaruRomName, NULL, NULL, NULL, NULL, AlienarInputInfo, NULL,
 	AlienarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
 	292, 240, 4, 3
 };
@@ -3583,6 +3589,43 @@ struct BurnDriver BurnDrvSinistarcsm = {
 	240, 292, 3, 4
 };
 
+// Sinistar (SynaMax 2025 difficulty/titlescreen hack, revision 3, upright)
+
+static struct BurnRomInfo sinistarsm25RomDesc[] = {
+	{ "sinistar_rom_10-b_16-3004-62.4c.mod25",0x1000, 0xfbd8eaf5, 1 | BRF_PRG | BRF_ESS }, //  0 M6809 Code
+	{ "sinistar_rom_11-b_16-3004-63.4a.mod25",0x1000, 0xbd8c4f3f, 1 | BRF_PRG | BRF_ESS }, //  1
+	{ "sinistar_rom_1-b_16-3004-53.1d",		0x1000, 0xf6f3a22c, 1 | BRF_PRG | BRF_ESS }, //  2
+	{ "sinistar_rom_2-b_16-3004-54.1c",		0x1000, 0xcab3185c, 1 | BRF_PRG | BRF_ESS }, //  3
+	{ "sinistar_rom_3-b_16-3004-55.1a.mod25",0x1000, 0x704ed653, 1 | BRF_PRG | BRF_ESS }, //  4
+	{ "sinistar_rom_4-b_16-3004-56.2d.mod25",0x1000, 0x421a47eb, 1 | BRF_PRG | BRF_ESS }, //  5
+	{ "sinistar_rom_5-b_16-3004-57.2c.mod25",0x1000, 0x81251407, 1 | BRF_PRG | BRF_ESS }, //  6
+	{ "sinistar_rom_6-b_16-3004-58.2a.mod25",0x1000, 0x3bc54ce4, 1 | BRF_PRG | BRF_ESS }, //  7
+	{ "sinistar_rom_7-b_16-3004-59.3d.mod25",0x1000, 0xe965401d, 1 | BRF_PRG | BRF_ESS }, //  8
+	{ "sinistar_rom_8-b_16-3004-60.3c.mod25",0x1000, 0xeec28cb8, 1 | BRF_PRG | BRF_ESS }, //  9
+	{ "sinistar_rom_9-b_16-3004-61.3a.mod25",0x1000, 0x551ba9d4, 1 | BRF_PRG | BRF_ESS }, // 10
+
+	{ "3004_speech_ic7_r1_16-3004-52.ic7",	0x1000, 0xe1019568, 2 | BRF_PRG | BRF_ESS }, // 11 M6800 Code
+	{ "3004_speech_ic5_r1_16-3004-50.ic5",	0x1000, 0xcf3b5ffd, 2 | BRF_PRG | BRF_ESS }, // 12
+	{ "3004_speech_ic6_r1_16-3004-51.ic6",	0x1000, 0xff8d2645, 2 | BRF_PRG | BRF_ESS }, // 13
+	{ "3004_speech_ic4_r1_16-3004-49.ic4",	0x1000, 0x4b56a626, 2 | BRF_PRG | BRF_ESS }, // 14
+	{ "video_sound_rom_9_std.808.ic12",		0x1000, 0xb82f4ddb, 2 | BRF_PRG | BRF_ESS }, // 15
+
+	{ "decoder_rom_4.3g",					0x0200, 0xe6631c23, 0 | BRF_OPT },           // 16 Address Decoder
+	{ "decoder_rom_6.3c",					0x0200, 0x83faf25e, 0 | BRF_OPT },           // 17
+};
+
+STD_ROM_PICK(sinistarsm25)
+STD_ROM_FN(sinistarsm25)
+
+struct BurnDriver BurnDrvSinistarsm25 = {
+	"sinistarsm25", "sinistar", NULL, NULL, "2025",
+	"Sinistar (SynaMax 2025 difficulty/titlescreen hack)\0", "initial boot will black screen, hit reset to fix", "Williams", "6809 System",
+	NULL, NULL, NULL, NULL,
+	BDF_GAME_WORKING | BDF_CLONE | BDF_HACK | BDF_ORIENTATION_VERTICAL, 2, HARDWARE_MISC_PRE90S, GBF_SHOOT, 0,
+	NULL, sinistarsm25RomInfo, sinistarsm25RomName, NULL, NULL, NULL, NULL, SinistarInputInfo, NULL,
+	SinistarInit, DrvExit, DrvFrame, DrvDraw, DrvScan, &DrvRecalc, 0x10,
+	240, 292, 3, 4
+};
 
 // Sinistar (revision 2, upright)
 // solid RED labels with final production part numbers

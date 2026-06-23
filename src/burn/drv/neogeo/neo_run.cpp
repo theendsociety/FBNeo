@@ -2127,12 +2127,10 @@ static void WriteIO2(INT32 nOffset, UINT8 byteValue)
 {
 	switch (nOffset) {
 		case 0x01:
-		case 0x11: // Screen Brightness
-			if (nNeoSystemType & NEO_SYS_CART) {
-				NeoRecalcPalette = 1;
-				bNeoDarkenPalette = (nOffset == 0x11) ? 1 : 0;
-				//bprintf(PRINT_NORMAL, _T("  - Darken Palette %X (0x%02X, at scanline %i).\n"), bNeoDarkenPalette, byteValue, NeoCurrentScanline());
-			}
+		case 0x11: // Shadow latch, causes the palette to nearly halfen in brightness
+			NeoRecalcPalette = 1;
+			bNeoDarkenPalette = (nOffset == 0x11) ? 1 : 0;
+			//bprintf(PRINT_NORMAL, _T("  - Darken Palette %X (0x%02X, at scanline %i).\n"), bNeoDarkenPalette, byteValue, NeoCurrentScanline());
 			break;
 
 		case 0x03:											// Select BIOS vector table
@@ -4340,6 +4338,7 @@ INT32 NeoInit()
 
 	nBIOS = 9999;
 	if (NeoLoad68KBIOS(NeoSystem & 0x3f)) {
+		bprintf(0, _T("Error loading bios!\n"));
 		return 1;
 	}
 
@@ -4769,6 +4768,12 @@ INT32 NeoFrame()
 		}
 	}
 
+	// note: Many neogeo games will be blocked on an anti-piracy screen or a black screen when the cpu is overclocked,
+	//       this is especially true for mslug games, one such case is mslug2 at both 0x200 and 0x400.
+	//       This seems directly related to SRAM writing, because getting the SRAM generated once at 0x100
+	//       and overclocking later works fine, meaning booting games with a forced overclock as it was done prior to
+	//       https://github.com/finalburnneo/FBNeo/commit/600088b8122d9977d3ae020dcd4101a3d5092a4d is not acceptable
+	//       (dozens of those mslug hacks wouldn't boot)
 	if (nPrevBurnCPUSpeedAdjust != nBurnCPUSpeedAdjust) {
 		bprintf(0, _T("\n---init cycles etc ---\n"));
 		// 68K CPU clock is 12MHz, modified by nBurnCPUSpeedAdjust

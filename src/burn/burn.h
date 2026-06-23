@@ -24,6 +24,37 @@
 
 #include <time.h>
 
+#ifndef SUPPORT_SPLIT_DRIVER
+ #define BUILD_ATARI
+ #define BUILD_CAPCOM
+ #define BUILD_CAVE
+ #define BUILD_CHANNELF
+ #define BUILD_COLECO
+ #define BUILD_CPS3
+ #define BUILD_DATAEAST
+ #define BUILD_GALAXIAN
+ #define BUILD_IREM
+ #define BUILD_KONAMI
+ #define BUILD_MEGADRIVE
+ #define BUILD_MIDWAY
+ #define BUILD_MSX
+ #define BUILD_NEOGEO
+ #define BUILD_NES
+ #define BUILD_PCE
+ #define BUILD_PGM
+ #define BUILD_PGM2
+ #define BUILD_PRE90S
+ #define BUILD_PSIKYO
+ #define BUILD_PST90S
+ #define BUILD_SEGA
+ #define BUILD_SG1000
+ #define BUILD_SMS
+ #define BUILD_SNES
+ #define BUILD_SPECTRUM
+ #define BUILD_TAITO
+ #define BUILD_TOAPLAN
+#endif
+
 extern TCHAR szAppHiscorePath[MAX_PATH];
 extern TCHAR szAppSamplesPath[MAX_PATH];
 extern TCHAR szAppHDDPath[MAX_PATH];
@@ -156,8 +187,28 @@ struct BurnHDDInfo {
 };
 
 // ---------------------------------------------------------------------------
-
 // Rom Data
+
+// Safe free function: frees memory and sets pointer to NULL to prevent dangling pointers
+static inline void free_s(void** p)
+{
+	if (p && *p) {
+		free(*p);
+		*p = NULL;
+	}
+}
+
+// Check if a TCHAR string is null or empty
+static inline bool IsStrEmpty(const TCHAR* s)
+{
+	return (!s || _T('\0') == *s);
+}
+
+// ANSI version of IsStrEmpty
+static inline bool IsStrEmptyA(const char* s)
+{
+	return (!s || '\0' == *s);
+}
 
 struct RomDataInfo {
 	char szZipName[MAX_PATH];
@@ -372,6 +423,10 @@ void BurnRandomSetSeed(UINT64 nSeed);               // Set the seed - useful for
 INT32 BurnSynchroniseStream(INT32 nSoundRate);
 double BurnGetTime();
 
+// Handy functions for changing resolution
+extern void (__cdecl *BurnResizeCallback)(INT32 width, INT32 height);
+void BurnSetResolution(INT32 width, INT32 height);
+
 // Handy debug binary-file dumper
 #if defined (FBNEO_DEBUG)
 void BurnDump_(char *filename, UINT8 *buffer, INT32 bufsize, INT32 append);
@@ -389,6 +444,11 @@ void BurnDumpLoad_(char *filename, UINT8 *buffer, INT32 bufsize);
 	BurnDumpLoad_(fn, b, bs); } while (0)
 
 #endif
+
+// Handy defines
+#define d_min(a, b) (((a) < (b)) ? (a) : (b))
+#define d_max(a, b) (((a) > (b)) ? (a) : (b))
+#define d_abs(z) (((z) < 0) ? -(z) : (z))
 
 // ---------------------------------------------------------------------------
 // Retrieve driver information
@@ -420,6 +480,7 @@ INT32 BurnDrvGetRomName(char** pszName, UINT32 i, INT32 nAka);
 INT32 BurnDrvGetInputInfo(struct BurnInputInfo* pii, UINT32 i);
 INT32 BurnDrvGetDIPInfo(struct BurnDIPInfo* pdi, UINT32 i);
 INT32 BurnDrvGetVisibleSize(INT32* pnWidth, INT32* pnHeight);
+INT32 BurnDrvGetOriginalVisibleSize(INT32* pnWidth, INT32* pnHeight);
 INT32 BurnDrvGetVisibleOffs(INT32* pnLeft, INT32* pnTop);
 INT32 BurnDrvGetFullSize(INT32* pnWidth, INT32* pnHeight);
 INT32 BurnDrvGetAspect(INT32* pnXAspect, INT32* pnYAspect);
@@ -437,7 +498,9 @@ INT32 BurnDrvGetHDDInfo(struct BurnHDDInfo *pri, UINT32 i);
 INT32 BurnDrvGetHDDName(char** pszName, UINT32 i, INT32 nAka);
 char* BurnDrvGetSourcefile();
 
-void Reinitialise();
+
+void Reinitialise(); // re-inits everything, including UI window
+void ReinitialiseVideo(); // re-init's video w/ new resolution/aspect ratio (see drv/megadrive.cpp)
 
 // ---------------------------------------------------------------------------
 // IPS Control
@@ -534,6 +597,7 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_PREFIX_NGP                             (0x20000000)
 #define HARDWARE_PREFIX_CHANNELF                        (0x21000000)
 #define HARDWARE_PREFIX_SNES                            (0x22000000)
+#define HARDWARE_PREFIX_IGS_PGM2						(0x23000000)
 
 #define HARDWARE_SNK_NGP								(HARDWARE_PREFIX_NGP | 0x00000000)
 #define HARDWARE_SNK_NGPC								(HARDWARE_PREFIX_NGP | 0x00000001) // must not be 0x10000
@@ -625,6 +689,7 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_CAVE_CV1000							(HARDWARE_PREFIX_CAVE | 0x00010000)
 
 #define HARDWARE_IGS_PGM								(HARDWARE_PREFIX_IGS_PGM)
+#define HARDWARE_IGS_PGM2								(HARDWARE_PREFIX_IGS_PGM2)
 #define HARDWARE_IGS_USE_ARM_CPU						(0x0001)
 
 #define HARDWARE_CAPCOM_CPS3							(HARDWARE_PREFIX_CPS3)
@@ -653,9 +718,11 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_SMS_MAPPER_KOREA16K 					(0x06)
 #define HARDWARE_SMS_MAPPER_4PAK     					(0x07)
 #define HARDWARE_SMS_MAPPER_XIN1     					(0x08)
+#define HARDWARE_SMS_MAPPER_WONDERKID					(0x09)
 #define HARDWARE_SMS_MAPPER_NONE     					(0x0F)
 
 #define HARDWARE_SMS_CONTROL_PADDLE						(0x00010)
+#define HARDWARE_SMS_CONTROL_PHASER						(0x00020)
 
 #define HARDWARE_SMS_NO_CART_HEADER						(0x01000)
 #define HARDWARE_SMS_GG_SMS_MODE						(0x02000)
@@ -729,17 +796,16 @@ int BurnComputeSHA1(const UINT8 *buffer, int buffer_size, char *hash_str);
 #define HARDWARE_SEGA_MEGADRIVE_PCB_POKEMON2			(41)
 #define HARDWARE_SEGA_MEGADRIVE_PCB_MULAN				(42)
 #define HARDWARE_SEGA_MEGADRIVE_PCB_16ZHANG             (43)
-#define HARDWARE_SEGA_MEGADRIVE_PCB_CHAOJIMJ            (44)
-#define HARDWARE_SEGA_MEGADRIVE_TEAMPLAYER              (0x40)
-#define HARDWARE_SEGA_MEGADRIVE_TEAMPLAYER_PORT2        (0x80)
-#define HARDWARE_SEGA_MEGADRIVE_FOURWAYPLAY             (0xc0)
+#define HARDWARE_SEGA_MEGADRIVE_PCB_CHAOJIMJ            (44) // we can have 64 (0-63) of these
 
-#define HARDWARE_SEGA_MEGADRIVE_SRAM_00400				(0x0100)
-#define HARDWARE_SEGA_MEGADRIVE_SRAM_00800				(0x0200)
-#define HARDWARE_SEGA_MEGADRIVE_SRAM_01000				(0x0400)
-#define HARDWARE_SEGA_MEGADRIVE_SRAM_04000				(0x0800)
-#define HARDWARE_SEGA_MEGADRIVE_SRAM_10000				(0x1000)
-#define HARDWARE_SEGA_MEGADRIVE_FRAM_00400				(0x2000)
+#define HARDWARE_SEGA_MEGADRIVE_LIGHTGUN_MENACER        (0x0100)
+#define HARDWARE_SEGA_MEGADRIVE_LIGHTGUN_JUSTIFIER      (0x0200)
+#define HARDWARE_SEGA_MEGADRIVE_TEAMPLAYER              (0x0400)
+#define HARDWARE_SEGA_MEGADRIVE_TEAMPLAYER_PORT2        (0x0800)
+#define HARDWARE_SEGA_MEGADRIVE_FOURWAYPLAY             (0x0c00)
+
+#define HARDWARE_SEGA_MEGADRIVE_SRAM_04000				(0x1000)
+#define HARDWARE_SEGA_MEGADRIVE_SRAM_10000				(0x2000)
 
 #define HARDWARE_PSIKYO									(HARDWARE_PREFIX_PSIKYO)
 

@@ -238,8 +238,10 @@ int ConfigAppLoad()
   if (szValue) x = _tcstod(szValue, NULL); }
 #define STR(x) { TCHAR* szValue = LabelCheck(szLine,_T(#x) _T(" "));	\
   if (szValue) _tcscpy(x,szValue); }
+#if 0
 #define PAT(x) { TCHAR* szValue = LabelCheck(szLine,_T(#x) _T(" "));	\
 	if (szValue) { _tcscpy(x, szValue); UpdatePath(x); } }
+#endif
 #define DRV(x) { TCHAR* szValue = LabelCheck(szLine,_T(#x) _T(" "));	\
   if (szValue) x = NameToDriver(szValue); }
 
@@ -386,9 +388,12 @@ int ConfigAppLoad()
 		VAR(bAlwaysProcessKeyboardInput);
 		VAR(bAutoPause);
 		VAR(bSaveInputs);
+		VAR(nKailleraCheatEnableHack);
 
 		VAR(nCDEmuSelect);
-		PAT(CDEmuImage);
+
+		// Note: was PAT(CDEmuImage) - but this caused slow startup when cd images are on a flash drive, and CDEmuImage points there
+		STR(CDEmuImage);
 
 		VAR(nRomsDlgWidth);
 		VAR(nRomsDlgHeight);
@@ -439,6 +444,7 @@ int ConfigAppLoad()
 		STR(szAppRomdataPath);
 		STR(szAppIconsPath);
 		STR(szNeoCDCoverDir);
+		STR(szNeoCDPreviewDir);
 		STR(szAppBlendPath);
 		STR(szAppSelectPath);
 		STR(szAppVersusPath);
@@ -452,6 +458,7 @@ int ConfigAppLoad()
 		STR(szAppCabinetsPath);
 		STR(szAppPCBsPath);
 		STR(szAppHistoryPath);
+		STR(szAppCommandPath);
 		STR(szAppEEPROMPath);
 
 		VAR(bEnableHighResTimer);
@@ -504,7 +511,7 @@ int ConfigAppLoad()
 		DRV(nBurnDrvSelect[5]);
 
 		VAR(bNeoCDListScanSub);
-		VAR(bNeoCDListScanOnlyISO);
+//		VAR(bNeoCDListScanOnlyISO);
 		
 		VAR(bRDListScanSub);
 
@@ -812,6 +819,8 @@ int ConfigAppSave()
 	VAR(bAutoPause);
 	_ftprintf(h, _T("\n// If non-zero, save the inputs for each game\n"));
 	VAR(bSaveInputs);
+	_ftprintf(h, _T("\n// If non-zero, Allow cheats in Kaillera.  Experimental & might cause desyncs!  Both sides must enable the same cheat at the same time, usually on titlescreen before starting game.\n"));
+	VAR(nKailleraCheatEnableHack);
 
 	_ftprintf(h, _T("\n\n\n"));
 	_ftprintf(h, _T("// --- CD emulation -----------------------------------------------------------\n"));
@@ -891,6 +900,7 @@ int ConfigAppSave()
 	STR(szAppRomdataPath);
 	STR(szAppIconsPath);
 	STR(szNeoCDCoverDir);
+	STR(szNeoCDPreviewDir);
 	STR(szAppBlendPath);
 	STR(szAppSelectPath);
 	STR(szAppVersusPath);
@@ -904,6 +914,7 @@ int ConfigAppSave()
 	STR(szAppCabinetsPath);
 	STR(szAppPCBsPath);
 	STR(szAppHistoryPath);
+	STR(szAppCommandPath);
 	STR(szAppEEPROMPath);
 
 	_ftprintf(h, _T("\n// The cartridges to use for emulation of an MVS system\n"));
@@ -916,7 +927,7 @@ int ConfigAppSave()
 
 	_ftprintf(h, _T("\n// Neo Geo CD Load Game Dialog options\n"));
 	VAR(bNeoCDListScanSub);
-	VAR(bNeoCDListScanOnlyISO);
+//	VAR(bNeoCDListScanOnlyISO);
 
 	_ftprintf(h, _T("\n// RomData Load Game Dialog options\n"));
 	VAR(bRDListScanSub);

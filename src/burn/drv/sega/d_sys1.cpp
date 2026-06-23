@@ -1892,7 +1892,7 @@ static struct BurnDIPInfo UfosensiDIPList[]=
    {0x15, 0x01, 0x20, 0x20, "No"		},
    {0x15, 0x01, 0x20, 0x00, "Yes"		},
 
-   {0   , 0xfe, 0   ,    2, "Unknown"		},
+   {0   , 0xfe, 0   ,    2, "Demo Sounds"		},
    {0x15, 0x01, 0x40, 0x40, "Off"		},
    {0x15, 0x01, 0x40, 0x00, "On"		},
 
@@ -1931,7 +1931,7 @@ static struct BurnDIPInfo WbmlDIPList[]=
 	{0x14, 0xff, 0xff, 0xff, NULL                     },
 
 	// Dip 1
-	{0   , 0xfe, 0   ,    2, "Cabinet"                },
+	{0   , 0xfe, 0   ,    1, "Cabinet"                },
 	{0x13, 0x01, 0x01, 0x00, "Upright"                },
 	//{0x13, 0x01, 0x01, 0x01, "Cocktail"               }, no screen flipping here :)
 
@@ -1939,10 +1939,11 @@ static struct BurnDIPInfo WbmlDIPList[]=
 	{0x13, 0x01, 0x02, 0x00, "Off"		},
 	{0x13, 0x01, 0x02, 0x02, "On"		},
 
-	{0   , 0xfe, 0   ,    3, "Lives"		},
+	{0   , 0xfe, 0   ,    4, "Lives"		},
 	{0x13, 0x01, 0x0c, 0x04, "3"		},
 	{0x13, 0x01, 0x0c, 0x0c, "4"		},
 	{0x13, 0x01, 0x0c, 0x08, "5"		},
+	{0x13, 0x01, 0x0c, 0x00, "Free Play"		},
 
 	{0   , 0xfe, 0   ,    2, "Bonus Life"		},
 	{0x13, 0x01, 0x10, 0x10, "30000 100000 200000"		},
@@ -1956,7 +1957,7 @@ static struct BurnDIPInfo WbmlDIPList[]=
 	{0x13, 0x01, 0x40, 0x40, "Off"		},
 	{0x13, 0x01, 0x40, 0x00, "On"		},
 
-	{0   , 0xfe, 0   ,    2, "Unknown"		},
+	{0   , 0xfe, 0   ,    2, "Unused"		},
 	{0x13, 0x01, 0x80, 0x80, "Off"		},
 	{0x13, 0x01, 0x80, 0x00, "On"		},
 
@@ -5300,7 +5301,7 @@ static INT32 System1DoReset()
 
 	nCyclesExtra[0] = nCyclesExtra[1] = nCyclesExtra[2] = 0;
 
-	HiscoreReset();
+	HiscoreReset(1);
 
 	return 0;
 }
@@ -5336,9 +5337,6 @@ static inline void System2_videoram_bank_latch_w(UINT8 d)
 {
 	System1BgBankLatch = d;
 	System1BgBank = (d >> 1) & 0x03;
-
-	// iq_132
-	ZetMapMemory(System1VideoRam + System1BgBank * 0x1000, 0xe000, 0xefff, MAP_RAM);
 }
 
 static inline void __fastcall System1SoundLatchWrite(UINT8 d)
@@ -5737,8 +5735,29 @@ static void __fastcall NoboranbZ801PortWrite(UINT16 a, UINT8 d)
 	//bprintf(PRINT_NORMAL, _T("IO Write %x, %x\n"), a, d);
 }
 
+static void vram_waitstate()
+{
+	/* The main Z80's CPU clock is halted whenever an access to VRAM happens,
+	   and is only restarted by the FIXST signal, which occurs once every
+	   'n' pixel clocks. 'n' is determined by the horizontal control PAL. */
+
+	/* this assumes 4 5MHz pixel clocks per FIXST, or 3.2 4MHz CPU clocks,
+	   and is based on a dump of 315-5137 */
+	const UINT32 cpu_cycles_per_fixst = 32; // 3.2 * 10
+	const UINT32 fixst_offset = cpu_cycles_per_fixst / 2;
+	const UINT64 total_cycles = ZetTotalCycles() * 10ULL;
+	UINT32 cycles_until_next_fixst = cpu_cycles_per_fixst - ((total_cycles - fixst_offset) % cpu_cycles_per_fixst);
+	ZetIdle(((cycles_until_next_fixst + 5) / 10));
+}
+
 static void __fastcall System1Z801ProgWrite(UINT16 a, UINT8 d)
 {
+	if (a >= 0xe000 && a <= 0xefff) {
+		vram_waitstate();
+		System1VideoRam[(a & 0xfff) + System1BgBank * 0x1000] = d;
+		return;
+	}
+
 	if (a >= 0xf000 && a <= 0xf3ff) { System1BgCollisionRam[a & 0x3ff] = 0x7e; return; }
 	if (a >= 0xf800 && a <= 0xfbff) { System1SprCollisionRam[a & 0x3ff] = 0x7e; return; }
 
@@ -5747,12 +5766,27 @@ static void __fastcall System1Z801ProgWrite(UINT16 a, UINT8 d)
 
 static void __fastcall NoboranbZ801ProgWrite(UINT16 a, UINT8 d)
 {
+	if (a >= 0xe000 && a <= 0xefff) {
+		vram_waitstate();
+		System1VideoRam[(a & 0xfff) + System1BgBank * 0x1000] = d;
+		return;
+	}
+
 	if (a >= 0xc000 && a <= 0xc3ff) { System1BgCollisionRam[a & 0x3ff] = 0x7e; return; }
 	if (a >= 0xc800 && a <= 0xcbff) { System1SprCollisionRam[a & 0x3ff] = 0x7e; return; }
 
 	bprintf(PRINT_NORMAL, _T("Prog Write %x, %x\n"), a, d);
 }
 
+static UINT8 __fastcall System1Z801ProgRead(UINT16 a)
+{
+	if (a >= 0xe000 && a <= 0xefff) {
+		vram_waitstate();
+		return System1VideoRam[(a & 0xfff) + System1BgBank * 0x1000];
+	}
+	bprintf(0, _T("pr %x\n"), a);
+	return 0;
+}
 
 static UINT8 __fastcall System1Z802ProgRead(UINT16 a)
 {
@@ -5779,8 +5813,8 @@ static void __fastcall System1Z802ProgWrite(UINT16 a, UINT8 d)
 			return;
 		}
 	}
-
-	bprintf(PRINT_NORMAL, _T("Z80 2 Prog Write %x, %x\tPC:  %x\n"), a, d, ZetGetPrevPC(-1));
+	if (a > 0x7fff)     // ignore writes to romspace
+		bprintf(PRINT_NORMAL, _T("Z80 2 Prog Write %x, %x\tPC:  %x\n"), a, d, ZetGetPrevPC(-1));
 }
 
 static void System2PPI0WriteA(UINT8 data)
@@ -6130,6 +6164,7 @@ static INT32 System1Init(INT32 nZ80Rom1Num, INT32 nZ80Rom1Size, INT32 nZ80Rom2Nu
 	z80_set_cycle_tables(&cc_op[0], &cc_cb[0], &cc_ed[0], &cc_xy[0], &cc_xycb[0], &cc_ex[0]);
 	if (IsSystem2) {
 		ZetSetWriteHandler(System1Z801ProgWrite);
+		ZetSetReadHandler(System1Z801ProgRead);
 		ZetSetInHandler(System2Z801PortRead);
 		ZetSetOutHandler(System2Z801PortWrite);
 
@@ -6141,6 +6176,7 @@ static INT32 System1Init(INT32 nZ80Rom1Num, INT32 nZ80Rom1Size, INT32 nZ80Rom2Nu
 		}
 	} else {
 		ZetSetWriteHandler(System1Z801ProgWrite);
+		ZetSetReadHandler(System1Z801ProgRead);
 		ZetSetInHandler(System1Z801PortRead);
 		ZetSetOutHandler(System1Z801PortWrite);
 		ZetMapMemory(System1Rom1,			0x0000, 0x7fff, MAP_ROM);
@@ -6960,7 +6996,7 @@ static void DrawPixel(INT32 x, INT32 y, INT32 SpriteNum, INT32 Colour)
 
 	SpriteOnScreenMap[(y * width) + x] = SpriteNum;
 
-	if (pBurnDraw && dx >= 0 && dx < nScreenWidth && dy >= 0 && dy < nScreenHeight) {
+	if (pTransDraw && dx >= 0 && dx < nScreenWidth && dy >= 0 && dy < nScreenHeight) {
 		UINT16 *pPixel = pTransDraw + (dy * nScreenWidth);
 		pPixel[dx] = Colour;
 	}
@@ -6969,8 +7005,7 @@ static void DrawPixel(INT32 x, INT32 y, INT32 SpriteNum, INT32 Colour)
 	yr = ((y - System1BgScrollY) & 0xff) / 8;
 
 	if (IsSystem2 == 0) {
-		if (System1BgRam[2 * (32 * yr + xr) + 1] & 0x10)
-		{
+		if (System1BgRam[2 * (32 * yr + xr) + 1] & 0x10) {
 			System1BgCollisionRam[0x20 + SpriteNum] = 0xff;
 		}
 	}
@@ -7124,11 +7159,6 @@ static void System1DrawBgLayer(INT32 PriorityDraw)
 				Code = ((Code >> 4) & 0x800) | (Code & 0x7ff);
 				Colour = ((Code >> 5) & 0x3f);
 
-				INT32 ColourOffs = 0x40;
-				if (Colour >= 0x10 && Colour <= 0x1f) ColourOffs += 0x10;
-				if (Colour >= 0x20 && Colour <= 0x2f) ColourOffs += 0x20;
-				if (Colour >= 0x30 && Colour <= 0x3f) ColourOffs += 0x30;
-
 				sx = (Offs >> 1) % 32;
 				sy = (Offs >> 1) / 32;
 
@@ -7269,7 +7299,9 @@ static INT32 System1Render()
 	if (nBurnLayer & 8) System1DrawBgLayer(1);
 	if (nSpriteEnable & 2) System1DrawFgLayer(1);
 	if (System1VideoMode & 0x10) BurnTransferClear();
-	BurnTransferCopy(System1Palette);
+
+	if (pBurnDraw)
+		BurnTransferCopy(System1Palette);
 
 	return 0;
 }
@@ -7363,13 +7395,17 @@ static INT32 System2Render()
 {
 	BurnTransferClear();
 	System1CalcPalette();
+
 	if (nBurnLayer & 1) System2DrawBgLayer(0);
 	if (nBurnLayer & 2) System1DrawSprites();
 	if (nBurnLayer & 4) System2DrawBgLayer(1);
 	if (nBurnLayer & 8) System2DrawFgLayer();
 	if (System1VideoMode & 0x10) BurnTransferClear();
 	if (EnforceBars) enforce_bars();
-	BurnTransferCopy(System1Palette);
+
+	if (pBurnDraw) {
+		BurnTransferCopy(System1Palette);
+	}
 
 	return 0;
 }
@@ -7396,6 +7432,7 @@ INT32 System1Frame()
 		DrvMCUIdle(nCyclesExtra[2]);
 		mcs51Close();
 	}
+	ZetIdle(0, nCyclesExtra[0]);
 	ZetIdle(1, nCyclesExtra[1]);
 
 	INT32 nInterleave = 256;
@@ -7408,7 +7445,7 @@ INT32 System1Frame()
 			mcs51Open(0);
 		}
 
-        CPU_RUN(0, Zet);
+        CPU_RUN_SYNCINT(0, Zet);
         if (i == nInterleave-1 && (has_mcu == 0 || is_nob)) ZetSetIRQLine(0, CPU_IRQSTATUS_HOLD);
 		if (has_mcu) {
 			CPU_RUN_SYNCINT(2, DrvMCU);
@@ -7426,7 +7463,7 @@ INT32 System1Frame()
 		ZetClose();
 	}
 
-	nCyclesExtra[0] = nCyclesDone[0] - nCyclesTotal[0];
+	nCyclesExtra[0] = ZetTotalCycles(0) - nCyclesTotal[0];
 	nCyclesExtra[1] = ZetTotalCycles(1) - nCyclesTotal[1];
 	if (has_mcu) {
 		mcs51Open(0);
@@ -7440,16 +7477,11 @@ INT32 System1Frame()
         SN76496Update(pBurnSoundOut, nBurnSoundLen);
 	}
 
-	if (pBurnDraw) {
-		BurnDrvRedraw();
+	// due to hw sprite/bg collision, we have run this even if pBurnDraw == NULL.
+	BurnDrvRedraw();
 
-		if (is_shtngmst) {
-			BurnGunDrawTargets();
-		}
-	} else {
-		// if video output disabled, we still have to draw sprites for HW
-		// collisions to work
-		System1DrawSprites();
+	if (is_shtngmst) {
+		BurnGunDrawTargets();
 	}
 
 	return 0;
@@ -7461,21 +7493,13 @@ Scan Driver
 
 static INT32 System1Scan(INT32 nAction, INT32 *pnMin)
 {
-	struct BurnArea ba;
-
 	if (pnMin != NULL) {
 		*pnMin = 0x029736;
 	}
 
-	if (nAction & ACB_MEMORY_RAM) {
-		memset(&ba, 0, sizeof(ba));
-		ba.Data	  = RamStart;
-		ba.nLen	  = RamEnd-RamStart;
-		ba.szName = "All Ram";
-		BurnAcb(&ba);
-	}
+	if (nAction & ACB_VOLATILE) {
+		ScanVar(RamStart, RamEnd-RamStart, "All Ram");
 
-	if (nAction & ACB_DRIVER_DATA) {
 		ZetScan(nAction);
 
 		if (has_mcu) {
@@ -8326,7 +8350,7 @@ struct BurnDriver BurnDrvWbml = {
 	"wbml", NULL, NULL, NULL, "1987",
 	"Wonder Boy: Monster Land (Japan New Ver., MC-8123, 317-0043)\0", NULL, "Sega / Westone", "System 2",
 	NULL, NULL, NULL, NULL,
-	BDF_GAME_WORKING | BDF_HISCORE_SUPPORTED, 2, HARDWARE_SEGA_SYSTEM1, GBF_PLATFORM, 0,
+	BDF_GAME_WORKING/* | BDF_HISCORE_SUPPORTED*/, 2, HARDWARE_SEGA_SYSTEM1, GBF_PLATFORM, 0,
 	NULL, wbmlRomInfo, wbmlRomName, NULL, NULL, NULL, NULL, MyheroInputInfo, WbmlDIPInfo,
 	WbmlInit, System1Exit, System1Frame, System2Render, System1Scan,
 	NULL, 0x800, 256, 224, 4, 3

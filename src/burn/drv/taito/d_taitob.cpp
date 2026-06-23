@@ -1469,8 +1469,10 @@ static struct BurnDIPInfo Rambo3DIPList[]=
 	{0x18, 0x01, 0x08, 0x00, "Trackball"		},
 
 	{0   , 0xfe, 0   ,    2, "Lightgun Mode for Trackball (Hack)" },
-	{0x19, 0x01, 0x01, 0x01, "On"				},
-	{0x19, 0x01, 0x01, 0x00, "Off"				},
+	{0x19, 0x82, 0x01, 0x01, "On"				},
+	{0x18, 0x00, 0x08, 0x08, NULL				},
+	{0x19, 0x82, 0x01, 0x00, "Off"				},
+	{0x18, 0x00, 0x08, 0x08, NULL				},
 
 };
 
@@ -1975,7 +1977,7 @@ static INT32 DrvExit()
 
 	SekExit();
 	ZetExit();
-	
+
 	if (sound_config == 0) {
 		BurnYM2610Exit();
 	} else {
@@ -2138,24 +2140,18 @@ static void hiticeFramebufferStateload(); // several pages below...
 
 static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 {
-	struct BurnArea ba;
-
 	if (pnMin) {
 		*pnMin = 0x029708;
 	}
 
 	if (nAction & ACB_VOLATILE) {
-		memset(&ba, 0, sizeof(ba));
-
-		ba.Data	  = TaitoRamStart;
-		ba.nLen	  = TaitoRamEnd - TaitoRamStart;
-		ba.szName = "All Ram";
-		BurnAcb(&ba);
+		ScanVar(TaitoRamStart, TaitoRamEnd - TaitoRamStart, "All Ram");
 
 		SekScan(nAction);
 		ZetScan(nAction);
 
 		TaitoICScan(nAction);
+		EEPROMScan(nAction, pnMin);
 
 		if (sound_config == 0) {
 			BurnYM2610Scan(nAction, pnMin);
@@ -2164,10 +2160,13 @@ static INT32 DrvScan(INT32 nAction, INT32 *pnMin)
 			MSM6295Scan(nAction, pnMin);
 		}
 
+		SCAN_VAR(eeprom_latch);
+		SCAN_VAR(coin_control);
 		SCAN_VAR(TaitoZ80Bank);
 		SCAN_VAR(TaitoWatchdog);
 		if (has_trackball) BurnTrackballScan();
 		SCAN_VAR(frame_counter);
+		SCAN_VAR(LastScrollX);
 
 		SCAN_VAR(nCyclesExtra);
 	}

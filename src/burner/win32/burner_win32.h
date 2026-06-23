@@ -50,6 +50,10 @@ INT32 Dx9Core_Init();
 #include "resource.h"
 #include "resource_string.h"
 #include "net.h"
+#include "zip.h" // unzip*() in sel.cpp
+#include "chd.h"
+#include "neocdlist.h"
+
 // ---------------------------------------------------------------------------
 
 // Macro for releasing a COM object
@@ -117,6 +121,7 @@ extern bool bAutoLoadGameList;
 extern bool bQuietLoading;
 extern bool bNoPopups;
 extern bool bShonkyProfileMode;
+extern int nKailleraCheatEnableHack;
 extern bool bDontInitMedia;
 
 extern bool bNoChangeNumLock;
@@ -267,6 +272,8 @@ extern bool bRescanRoms;
 extern bool bMenuEnabled;
 extern INT32 nQuickOpen;
 
+extern bool szPrevGamesNeedsUpdate;
+
 extern RECT SystemWorkArea;							// The full screen area
 extern int nWindowPosX, nWindowPosY;
 
@@ -331,6 +338,17 @@ bool MenuHandleKeyboard(MSG*);
 void MenuRemoveTheme();
 
 // sel.cpp
+
+	// unzip()'s buf must be free()'d after use.
+bool unzip(char *szZipFn, char *szFn, void **buf, size_t *bufsize);
+bool unzip_file_exists(char *szZipFn, char *szFn);
+
+	// context-based unzip, for unzipping many files from a single zip
+bool unzip_open_context(zip_t **zip_context, char *szZipFn);
+void unzip_close_context(zip_t **zip_context);
+bool unzip_unzip_context(zip_t **zip_context, char *szFn, void **buf, size_t *bufsize);
+bool unzip_exists_context(zip_t **zip_context, char *szFn);
+
 extern UINT64 nLoadMenuShowX;
 extern int nLoadMenuShowY;
 extern int nLoadMenuExpand;
@@ -367,16 +385,23 @@ void LoadDrvIcons();
 void UnloadDrvIcons();
 
 // neocdsel.cpp
-extern int NeoCDList_Init();
-extern bool bNeoCDListScanSub;
-extern bool bNeoCDListScanOnlyISO;
+int NeoCDList_Init();
+extern bool  bNeoCDListScanSub;
+extern bool  bNeoCDListScanOnlyISO;
 extern TCHAR szNeoCDCoverDir[MAX_PATH];
+extern TCHAR szNeoCDPreviewDir[MAX_PATH];
 extern TCHAR szNeoCDGamesDir[MAX_PATH];
+
 
 HBITMAP ImageToBitmap(HWND hwnd, IMAGE* img);
 HBITMAP PNGLoadBitmap(HWND hWnd, FILE* fp, int nWidth, int nHeight, int nPreset);
+HBITMAP PNGLoadBitmapBuffer(HWND hWnd, void *buffer, int bufferLength, int nWidth, int nHeight, int nPreset);
 HBITMAP LoadBitmap(HWND hWnd, FILE* fp, int nWidth, int nHeight, int nPreset);
 int NeoCDList_CheckISO(TCHAR* pszFile, void (*pfEntryCallBack)(INT32, TCHAR*));
+TCHAR* ParseCueGetImageFile(const TCHAR* cueFullPath);
+void  FreeNGCDGame(NGCDGAME** ppGame);
+INT32 GetNGCDGameTitle(const UINT32 nGameID, NGCDGAME** ppOutGame, bool bPrintLog = false);
+INT32 cdimgCountChdAudioTracks(TCHAR* pszFile);
 
 // romdata.cpp
 extern bool bRDListScanSub;
@@ -523,6 +548,40 @@ int	MemCardInsert();
 int	MemCardEject();
 int	MemCardToggle();
 
+// Returns true if the current driver supports memory card / IC card
+static inline bool HasMemCard() {
+	UINT32 hw = BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK;
+	
+#ifdef BUILD_NEOGEO
+	if (hw == HARDWARE_SNK_NEOGEO)
+	    return true;
+#endif
+
+#ifdef BUILD_PGM2
+    if (hw == HARDWARE_IGS_PGM2)
+	    return true;
+#endif
+	
+	return false;
+}
+
+#ifdef BUILD_PGM2
+// PGM2 per-slot card operations
+extern INT32 Pgm2MaxCardSlots;						// PGM2: number of card slots (0 = no cards)
+extern int nPgm2CardStatus[4];
+extern TCHAR szPgm2CardFile[4][MAX_PATH];
+int MemCardCreatePGM2Slot(int slot);
+int MemCardSelectPGM2Slot(int slot);
+int MemCardInsertPGM2Slot(int slot);
+int MemCardEjectPGM2Slot(int slot);
+
+// Returns true if the current driver is PGM2 with card support
+static inline bool IsPGM2WithCards() {
+	UINT32 hw = BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK;
+	return (hw == HARDWARE_IGS_PGM2 && Pgm2MaxCardSlots > 0);
+}
+#endif
+
 // progress.cpp
 int ProgressUpdateBurner(double dProgress, const TCHAR* pszText, bool bAbs);
 int ProgressCreate();
@@ -537,6 +596,28 @@ INT32 CheckFavorites(char *name);
 // luaconsole.cpp
 extern HWND LuaConsoleHWnd;
 void UpdateLuaConsole(const wchar_t* fname);
+
+// cd_img.cpp
+
+// Extended metadata container for CHD disk image
+// Stores parsed key-value tag information extracted from CHD track metadata
+// All text fields are dynamically allocated heap pointers, must be released by FreeChdExtMeta()
+struct CHD_EXT_META {
+	TCHAR* szSerial;			// SERIAL tag: unique game serial number, heap allocated
+	TCHAR* szName;			    // NAME tag: full game title, heap allocated
+	TCHAR* szPublisher;		    // PUBLISHER tag: game publisher name, heap allocated
+	TCHAR* szManufacturer;	    // MANUFACTURER tag: hardware manufacturer, heap allocated
+	TCHAR* szOemId;			    // OEMID tag: OEM identification string, heap allocated
+	TCHAR* szVersion;		    // VERSION tag: game revision / build version, heap allocated
+	TCHAR* szLanguages;		    // LANGUAGES tag: supported language list, heap allocated
+	TCHAR* szYear;			    // YEAR tag: official release year, heap allocated
+	INT32 nTrackCount;			// Total physical tracks contained inside CHD image
+	bool  bValid;				// Validity flag; TRUE if metadata parsing succeeded
+};
+
+// Parse extended metadata from opened CHD file
+INT32 GetChdExtMeta(chd_file* pChdFile, CHD_EXT_META** ppOutMeta);
+void FreeChdExtMeta(CHD_EXT_META* pMeta);
 
 // ---------------------------------------------------------------------------
 // Debugger

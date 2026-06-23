@@ -10,10 +10,9 @@
 
 #ifdef INCLUDE_FLACMP3_SUPPORT
 
-#ifndef DR_FLAC_IMPLEMENTATION
-#define DR_FLAC_IMPLEMENTATION
+// dr_flac implementation is now in dep/libs/libchdr/libchdr_flac.c
+// Only include header here (no DR_FLAC_IMPLEMENTATION)
 #include "dr_flac.h"
-#endif
 
 #ifndef DR_MP3_IMPLEMENTATION
 #define DR_MP3_IMPLEMENTATION
@@ -39,6 +38,8 @@ static INT32 bAddToStream = 0;
 static INT32 nTotalSamples = 0;
 INT32 bBurnSampleTrimSampleEnd = 0;
 
+enum { LATCH_NONE = 0, LATCH_STOP = 1, LATCH_RETRIG = 2 };
+
 struct sample_format
 {
 	UINT8 *data;
@@ -47,6 +48,7 @@ struct sample_format
 	UINT8 playing;
 	UINT8 loop;
 	UINT8 flags;
+	UINT8 latch;
 	INT32 playback_rate; // 100 = 100%, 200 = 200%,
 	double gain[2];
 	double gain_target[2]; // ramp gain up or down to gain_target (see BurnSampleSetRouteFade())
@@ -546,8 +548,14 @@ void BurnSamplePlay(INT32 sample)
 		BurnSampleInitOne(sample);
 	}
 
-	sample_ptr->playing = 1;
-	sample_ptr->position = 0;
+	if (BurnSampleGetStatus(sample) == SAMPLE_PLAYING) {
+		//bprintf(0, _T("BurnSamplePlay(): REtrig sample %x  fr %d\n"), sample, nCurrentFrame);
+		sample_ptr->latch = LATCH_RETRIG;
+	} else {
+		//bprintf(0, _T("BurnSamplePlay(): play sample %x  fr %d\n"), sample, nCurrentFrame);
+		sample_ptr->playing = 1;
+		sample_ptr->position = 0;
+	}
 }
 
 void BurnSampleChannelPlay(INT32 channel, INT32 sample, INT32 loop)
@@ -557,9 +565,12 @@ void BurnSampleChannelPlay(INT32 channel, INT32 sample, INT32 loop)
 	if (channel >= MAX_CHANNEL) bprintf(PRINT_ERROR, _T("BurnSampleChannelPlay called with invalid channel (%d), max is %d\n"), channel, MAX_CHANNEL);
 #endif
 
-	if (sample >= nTotalSamples) return;
+	if (sample >= nTotalSamples || channel >= MAX_CHANNEL) return;
 
-	BurnSampleChannelStop(channel);
+	if (sample_channels[channel] != sample) {
+		// different sample on this channel, stop previous sample first
+		BurnSampleChannelStop(channel);
+	}
 
 	sample_channels[channel] = sample;
 
@@ -622,7 +633,7 @@ void BurnSampleStop_INT(INT32 sample) // internal use, without _SYNC
 	//sample_ptr->playback_rate = 100; // 100% // on load and reset, only!
 }
 
-void BurnSampleStop(INT32 sample)
+void BurnSampleStop(INT32 sample, bool softstop)
 {
 #if defined FBNEO_DEBUG
 	if (!DebugSnd_SamplesInitted) bprintf(PRINT_ERROR, _T("BurnSampleStop called without init\n"));
@@ -633,18 +644,35 @@ void BurnSampleStop(INT32 sample)
 	BurnSampleSync();
 
 	sample_ptr = &samples[sample];
-	sample_ptr->playing = 0;
-	sample_ptr->position = 0;
-	//sample_ptr->playback_rate = 100; // 100% // on load and reset, only!
+
+	if (softstop && BurnSampleGetStatus(sample) == SAMPLE_PLAYING) {
+		//bprintf(0, _T("BurnSampleStop(): Soft-stop sample %x\n"), sample);
+		sample_ptr->latch = LATCH_STOP;
+	} else {
+		sample_ptr->playing = 0;
+		sample_ptr->position = 0;
+		//sample_ptr->playback_rate = 100; // 100% // on load and reset, only!
+	}
 }
 
-void BurnSampleChannelStop(INT32 channel)
+void BurnSampleStopAll(bool softstop)
+{
+#if defined FBNEO_DEBUG
+	if (!DebugSnd_SamplesInitted) bprintf(PRINT_ERROR, _T("BurnSampleStopAll called without init\n"));
+#endif
+
+	for (INT32 i = 0; i < nTotalSamples; i++) {
+		BurnSampleStop(i, softstop);
+	}
+}
+
+void BurnSampleChannelStop(INT32 channel, bool softstop)
 {
 #if defined FBNEO_DEBUG
 	if (channel >= MAX_CHANNEL) bprintf(PRINT_ERROR, _T("BurnSampleChannelStop called with invalid channel (%d), max is %d\n"), channel, MAX_CHANNEL);
 #endif
 
-	BurnSampleStop(sample_channels[channel]);
+	BurnSampleStop(sample_channels[channel], softstop);
 }
 
 void BurnSampleSetLoop(INT32 sample, bool dothis)
@@ -683,6 +711,10 @@ INT32 BurnSampleGetChannelStatus(INT32 channel)
 #if defined FBNEO_DEBUG
 	if (channel >= MAX_CHANNEL) bprintf(PRINT_ERROR, _T("BurnSampleGetChannelStatus called with invalid channel (%d), max is %d\n"), channel, MAX_CHANNEL);
 #endif
+
+	if (sample_channels[channel] == MAX_CHANNEL-1) {
+		return SAMPLE_STOPPED; // nothing here yet
+	}
 
 	return BurnSampleGetStatus(sample_channels[channel]);
 }
@@ -733,6 +765,15 @@ void BurnSampleChannelSetPosition(INT32 channel, UINT32 position)
 	BurnSampleSetPosition(sample_channels[channel], position);
 }
 
+void BurnSampleChannelSetPlaybackRate(INT32 channel, INT32 rate)
+{
+#if defined FBNEO_DEBUG
+	if (channel >= MAX_CHANNEL) bprintf(PRINT_ERROR, _T("BurnSampleChannelSetPlaybackRate called with invalid channel (%d), max is %d\n"), channel, MAX_CHANNEL);
+#endif
+
+	BurnSampleSetPlaybackRate(sample_channels[channel], rate);
+}
+
 void BurnSampleSetPlaybackRate(INT32 sample, INT32 rate)
 {
 #if defined FBNEO_DEBUG
@@ -754,7 +795,9 @@ void BurnSampleReset()
 	if (!DebugSnd_SamplesInitted) bprintf(PRINT_ERROR, _T("BurnSampleReset called without init\n"));
 #endif
 
-	memset (sample_channels, 0, sizeof(sample_channels));
+	for (INT32 i = 0; i < MAX_CHANNEL; i++) {
+		sample_channels[i] = MAX_CHANNEL-1;
+	}
 
 	IN_RESET = 1;
 
@@ -885,7 +928,7 @@ void BurnSampleInit(INT32 bAdd /*add samples to stream?*/)
 
 		if (length) {
 			sample_ptr->flags = si.nFlags;
-			bprintf(0, _T("Loading \"%S\": "), szSampleName);
+			bprintf(0, _T("Loading \"%S\" @ %d: "), szSampleName, i);
 			make_raw((UINT8*)destination, length);
 			free(destination);			// ZipLoadOneFile uses malloc()
 		} else {
@@ -902,7 +945,7 @@ void BurnSampleInit(INT32 bAdd /*add samples to stream?*/)
 
 			if (length) {
 				sample_ptr->flags = si.nFlags;
-				bprintf(0, _T("Loading FLAC \"%S\": "), szSampleName);
+				bprintf(0, _T("Loading FLAC \"%S\" @ %d: "), szSampleName, i);
 				make_raw_flac((UINT8*)destination, length);
 				free(destination);		// ZipLoadOneFile uses malloc()
 			} else {
@@ -918,7 +961,7 @@ void BurnSampleInit(INT32 bAdd /*add samples to stream?*/)
 
 				if (length) {
 					sample_ptr->flags = si.nFlags;
-					bprintf(0, _T("Loading MP3 \"%S\": "), szSampleName);
+					bprintf(0, _T("Loading MP3 \"%S\" @ %d: "), szSampleName, i);
 					make_raw_mp3((UINT8*)destination, length);
 					free(destination);	// ZipLoadOneFile uses malloc()
 				} else {
@@ -926,6 +969,7 @@ void BurnSampleInit(INT32 bAdd /*add samples to stream?*/)
 				}
 			}
 #else
+				bprintf(0, _T("Loading \"%S\" @ %d: sample missing!"), szSampleName, i);
 				sample_ptr->flags = SAMPLE_IGNORE;
 #endif
 		}
@@ -1175,6 +1219,31 @@ void BurnSampleRender(INT16 *pDest, UINT32 pLen)
 	nPosition = 0;
 }
 
+static bool sample_low(INT32 sam)
+{
+	sam = d_abs(sam);
+	return ( sam == 0 );
+}
+
+static inline void latch_ramp_gain(double &gain1, double &gain2)
+{
+	// note: ramp steps larger than 0.005 will cause clicks with low frequencies.
+	if (gain1 >= 0.005) {
+		gain1 -= 0.005;
+	} else if (gain1 >= 0.001) {
+		gain1 -= 0.001;
+	} else if (gain1 < 0.001) {
+		gain1 = 0.0;
+	}
+	if (gain2 >= 0.005) {
+		gain2 -= 0.005;
+	} else if (gain2 >= 0.001) {
+		gain2 -= 0.001;
+	} else if (gain2 < 0.001) {
+		gain2 = 0.0;
+	}
+}
+
 static void BurnSampleRender_INT(UINT32 pLen)
 {
 	if (pBurnSoundOut == NULL || soundbuf == NULL) {
@@ -1187,7 +1256,10 @@ static void BurnSampleRender_INT(UINT32 pLen)
 	for (INT32 i = 0; i < nTotalSamples; i++)
 	{
 		sample_ptr = &samples[i];
-		if (sample_ptr->playing == 0 || sample_ptr->length == 0) continue;
+		if (sample_ptr->playing == 0 || sample_ptr->length == 0) {
+			sample_ptr->latch = 0; // clear latch (for now!)
+			continue;
+		}
 
 		if (sample_ptr->data == NULL) {
 			if (sample_ptr->flags & SAMPLE_NOSTOREF) {
@@ -1202,36 +1274,20 @@ static void BurnSampleRender_INT(UINT32 pLen)
 		INT32 length = sample_ptr->length;
 		UINT64 pos = sample_ptr->position;
 		INT32 playback_rate = (0x10000 * sample_ptr->playback_rate) / 100;
-
 		INT16 *dst = pDest;
 		INT16 *dat = (INT16*)sample_ptr->data;
-		
-		if (sample_ptr->loop == 0) // if not looping, check to make sure sample is in bounds
-		{
-			INT32 current_pos = (pos / 0x10000);
-			// if sample position is greater than length, stop playback
-			if ((length - current_pos) <= 0) {
-				BurnSampleStop_INT(i);
-				pos = 0;
-				continue;
-			}
-
-			// if samples remaining are less than playlen, set playlen to samples remaining
-			//if (playlen > (length - current_pos)) playlen = length - current_pos;
-			// commented above line oct.2022 (dink) - causes end of sample to be delayed until next sync
-		}
 
 		length *= 2; // (stereo) used to ensure position is within bounds
 
-		for (INT32 j = 0; j < playlen; j++, dst+=2, pos+=playback_rate) {
+		for (INT32 j = 0; j < playlen; j++, dst+=2) {
 			INT32 nLeftSample = 0, nRightSample = 0;
-			UINT32 current_pos = (pos / 0x10000);
-			UINT32 position = current_pos * 2; // ~1
+			const UINT32 current_pos = (pos / 0x10000);
+			const UINT32 position = current_pos * 2;
 
 			if (sample_ptr->loop == 0) // if not looping, check to make sure sample is in bounds
 			{
 				// if sample position is greater than length, stop playback
-				if ((sample_ptr->length - current_pos) <= 0) {
+				if (current_pos >= sample_ptr->length) {
 					BurnSampleStop_INT(i);
 					pos = 0;
 					break;
@@ -1255,24 +1311,54 @@ static void BurnSampleRender_INT(UINT32 pLen)
 			dst[0] = BURN_SND_CLIP(dst[0] + nLeftSample);
 			dst[1] = BURN_SND_CLIP(dst[1] + nRightSample);
 
-			if (bNiceFadeVolume) {
-				if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] != sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1]) {
-					if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] > sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1]) {
-						sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] -= 0.01;
-					} else if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] < sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1]) {
-						sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] += 0.01;
+			bool position_increment = true;
+
+			if (sample_ptr->latch & (LATCH_RETRIG | LATCH_STOP)) {
+				// LATCH_RETRIG: ramp down and then re-start sample, to avoid clicks
+				// LATCH_STOP: ramp down and stop sample.
+
+				//bprintf(0, _T("[%.15g  %.15g]\n"),sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1], sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2]);
+
+				if (sample_low(nLeftSample) &&
+					sample_low(nRightSample) )
+				{
+					position_increment = false; // we don't want to skip the first sample if starting over w/LATCH_RETRIG
+					pos = 0;
+					sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] = sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1];
+					sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] = sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2];
+
+					if (sample_ptr->latch & LATCH_STOP) {
+						BurnSampleStop_INT(i);
+						sample_ptr->latch = LATCH_NONE;
+						//bprintf(0, _T("[soft-stop %d!]\n"), i);
+						break; // break out of this channel's loop
+					} else if (sample_ptr->latch & LATCH_RETRIG) {
+						position_increment = false; // we don't want to skip the first sample if starting over w/LATCH_RETRIG
+						//bprintf(0, _T("[soft-retrig %d!]\n"), i);
+						sample_ptr->latch = LATCH_NONE;
 					}
 				}
-				if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] != sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2]) {
-					if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] > sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2]) {
-						sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] -= 0.01;
-					} else if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] < sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2]) {
-						sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] += 0.01;
+				latch_ramp_gain(sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1], sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2]);
+			} else {
+				if (bNiceFadeVolume) {
+					if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] != sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1]) {
+						if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] > sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1]) {
+							sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] -= 0.01;
+						} else if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] < sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1] && sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_1] != 0.0) {
+							sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_1] += 0.01;
+						}
+					}
+					if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] != sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2]) {
+						if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] > sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2]) {
+							sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] -= 0.01;
+						} else if (sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] < sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2] && sample_ptr->gain_target[BURN_SND_SAMPLE_ROUTE_2] != 0.0) {
+							sample_ptr->gain[BURN_SND_SAMPLE_ROUTE_2] += 0.01;
+						}
 					}
 				}
 			}
+			if (position_increment) pos+=playback_rate;
 		}
-
 		sample_ptr->position = pos; // store the updated position
 	}
 }
@@ -1294,8 +1380,80 @@ void BurnSampleScan(INT32 nAction, INT32 *pnMin)
 			SCAN_VAR(sample_ptr->loop);
 			SCAN_VAR(sample_ptr->position);
 			SCAN_VAR(sample_ptr->playback_rate);
+			SCAN_VAR(sample_ptr->latch);
+			SCAN_VAR(sample_ptr->gain);
+			SCAN_VAR(sample_ptr->gain_target);
 		}
 
 		SCAN_VAR(sample_channels);
 	}
 }
+
+// dink's super handy macros
+void splay(INT32 sam, double volume, bool checkplay, bool loop)
+{
+	if ( (checkplay && BurnSampleGetStatus(sam) == SAMPLE_STOPPED) || !checkplay ) {
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_1, volume, BURN_SND_ROUTE_BOTH);
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_2, volume, BURN_SND_ROUTE_BOTH);
+
+		BurnSampleSetLoop(sam, loop);
+
+		BurnSamplePlay(sam);
+	}
+}
+
+void splayex(INT32 sam, double volume, INT32 rate, bool checkplay, bool loop)
+{
+	if ( (checkplay && BurnSampleGetStatus(sam) == SAMPLE_STOPPED) || !checkplay ) {
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_1, volume, BURN_SND_ROUTE_BOTH);
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_2, volume, BURN_SND_ROUTE_BOTH);
+
+		BurnSampleSetLoop(sam, loop);
+		BurnSampleSetPlaybackRate(sam, rate);
+
+		BurnSamplePlay(sam);
+	}
+}
+
+void splaych(INT32 ch, INT32 sam, double volume, bool checkplay, bool loop)
+{
+	if ( (checkplay && BurnSampleGetChannelStatus(ch) == SAMPLE_STOPPED) || !checkplay ) {
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_1, volume, BURN_SND_ROUTE_BOTH);
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_2, volume, BURN_SND_ROUTE_BOTH);
+
+		BurnSampleChannelPlay(ch, sam, loop);
+	}
+}
+
+void splayexch(INT32 ch, INT32 sam, double volume, INT32 rate, bool checkplay, bool loop)
+{
+	if ( (checkplay && BurnSampleGetChannelStatus(ch) == SAMPLE_STOPPED) || !checkplay ) {
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_1, volume, BURN_SND_ROUTE_BOTH);
+		BurnSampleSetRoute(sam, BURN_SND_SAMPLE_ROUTE_2, volume, BURN_SND_ROUTE_BOTH);
+
+		BurnSampleSetPlaybackRate(sam, rate);
+
+		BurnSampleChannelPlay(ch, sam, loop);
+	}
+}
+
+void sstop(INT32 sam)
+{
+	BurnSampleStop(sam, true); // +softstop
+}
+
+void sstopch(INT32 ch)
+{
+	BurnSampleChannelStop(ch, true);
+}
+
+bool splaying(INT32 sam)
+{
+	return (BurnSampleGetStatus(sam) == SAMPLE_PLAYING);
+}
+
+bool splayingch(INT32 ch)
+{
+	return (BurnSampleGetChannelStatus(ch) == SAMPLE_PLAYING);
+}
+

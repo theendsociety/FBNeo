@@ -1470,6 +1470,7 @@ TCHAR* RomdataGetFullName(const TCHAR* pszFileName)
 					nAdd = _tcslen(szMerger);
 				}
 				szMerger[nAdd - 1] = _T('\0');
+				fclose(fp);
 				return szMerger;
 			}
 		}
@@ -1832,6 +1833,7 @@ static void RomdataListFindDats(const TCHAR* dirPath)
 	} while (FindNextFile(hFind, &findFileData));
 
 	FindClose(hFind);
+	memset(szRomdataName, 0, sizeof(szRomdataName));	// Clear szRomdataName to prevent accidental use in other places
 }
 
 bool FindZipNameFromDats(const TCHAR* dirPath, const char* pszZipName, TCHAR* pszFindDat)
@@ -1902,13 +1904,12 @@ bool RomDataExportTemplate(HWND hWnd, const INT32 nDrvSelect)
 	ofn.hwndOwner = hWnd;
 	ofn.lpstrFilter = szFilter;
 	ofn.lpstrFile = szChoice;
-	ofn.nMaxFile = sizeof(szChoice) / sizeof(TCHAR);
-	ofn.lpstrInitialDir = _T(".");
-	ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrInitialDir = NULL;
+	ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
 	ofn.lpstrDefExt = _T("dat");
-	ofn.Flags |= OFN_OVERWRITEPROMPT;
 
-	if (0 == GetOpenFileName(&ofn)) {
+	if (0 == GetSaveFileName(&ofn)) {
 		nBurnDrvActive = nOldDrvSel;
 		return false;
 	}
